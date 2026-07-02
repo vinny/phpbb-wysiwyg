@@ -1,0 +1,36 @@
+{
+    "name": "vinny/wysiwyg",
+    "type": "phpbb-extension",
+    "description": "TipTap-based WYSIWYG editor for phpBB 3.3.x with native BBCode parser integration.",
+    "homepage": "https://github.com/vinny/phpbb-wysiwyg",
+    "version": "1.0.0",
+    "keywords": [
+        "phpbb",
+        "extension",
+        "wysiwyg",
+        "tiptap",
+        "bbcode"
+    ],
+    "license": "GPL-2.0-only",
+    "authors": [
+        {
+            "name": "Vinny",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=7.2.0",
+        "composer/installers": "~1.0.0"
+    },
+    "extra": {
+        "display-name": "WYSIWYG Editor",
+        "soft-require": {
+            "phpbb/phpbb": ">=3.3.0,<4.0.0@dev"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    }
+}

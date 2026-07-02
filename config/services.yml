@@ -1,0 +1,30 @@
+services:
+    vinny.wysiwyg.text_formatter.converter:
+        class: vinny\wysiwyg\text_formatter\converter
+        arguments:
+            - '@dbal.conn'
+            - '@config'
+            - '%core.root_path%'
+            - '@service_container'
+
+    vinny.wysiwyg.controller:
+        class: vinny\wysiwyg\controller\wysiwyg_controller
+        arguments:
+            - '@request'
+            - '@vinny.wysiwyg.text_formatter.converter'
+            - '@config'
+            - '@auth'
+            - '@user'
+
+    vinny.wysiwyg.listener:
+        class: vinny\wysiwyg\event\main_listener
+        arguments:
+            - '@request'
+            - '@vinny.wysiwyg.text_formatter.converter'
+            - '@config'
+            - '@user'
+            - '@template'
+            - '@auth'
+            - '@controller.helper'
+        tags:
+            - { name: event.listener }

@@ -1,0 +1,486 @@
+/* WYSIWYG Editor style for phpBB vinny/wysiwyg */
+
+.wysiwyg-editor-wrapper {
+	border: 1px solid #c5c5c5;
+	border-radius: 8px;
+	background-color: #ffffff;
+	margin-bottom: 12px;
+	overflow: hidden;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.wysiwyg-editor-wrapper:focus-within {
+	border-color: #3f9cdb;
+	box-shadow: 0 0 8px rgba(63, 156, 219, 0.25);
+}
+
+/* Toolbar styling */
+.wysiwyg-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	padding: 6px;
+	background-color: #f7f7f7;
+	border-bottom: 1px solid #c5c5c5;
+	gap: 4px;
+}
+
+/* Toolbar button styling */
+.wysiwyg-btn {
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	color: #333333;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 28px;
+	padding: 4px;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 500;
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.wysiwyg-btn:hover {
+	background-color: #e5e5e5;
+	border-color: #d0d0d0;
+}
+
+.wysiwyg-btn.is-active {
+	background-color: #d5e6f3;
+	border-color: #a4c9e7;
+	color: #0b5894;
+}
+
+.wysiwyg-btn svg {
+	width: 16px;
+	height: 16px;
+	fill: currentColor;
+}
+
+/* Separator between button groups */
+.wysiwyg-separator {
+	width: 1px;
+	height: 18px;
+	background-color: #d8d8d8;
+	margin: 0 4px;
+}
+
+/* Color and Size Dropdowns / Inputs */
+.wysiwyg-toolbar select {
+	padding: 2px 6px;
+	border: 1px solid #c5c5c5;
+	border-radius: 4px;
+	background-color: #ffffff;
+	font-size: 12px;
+	color: #333333;
+	height: 28px;
+	cursor: pointer;
+}
+
+.wysiwyg-toolbar select:focus {
+	outline: none;
+	border-color: #3f9cdb;
+}
+
+/* Editor content area */
+.wysiwyg-content-area {
+	min-height: 250px;
+	max-height: 500px;
+	overflow-y: auto;
+}
+
+.wysiwyg-content-area .ProseMirror {
+	padding: 12px 15px;
+	min-height: 230px;
+	outline: none;
+	font-family: "Lucida Grande", Verdana, Helvetica, Arial, sans-serif;
+	font-size: 13px;
+	line-height: 1.5;
+	color: #333333;
+}
+
+.wysiwyg-content-area .ProseMirror p {
+	margin-bottom: 12px;
+}
+
+.wysiwyg-content-area .ProseMirror p:last-child {
+	margin-bottom: 0;
+}
+
+.wysiwyg-content-area .ProseMirror strong {
+	font-weight: bold;
+}
+
+.wysiwyg-content-area .ProseMirror em {
+	font-style: italic;
+}
+
+.wysiwyg-content-area .ProseMirror u {
+	text-decoration: underline;
+}
+
+.wysiwyg-content-area .ProseMirror s {
+	text-decoration: line-through;
+}
+
+.wysiwyg-content-area .ProseMirror :not(pre) > code {
+	background: #f4f4f4;
+	padding: 2px 4px;
+	border-radius: 3px;
+	font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+	font-size: 12px;
+}
+
+.wysiwyg-content-area .ProseMirror pre code {
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+}
+
+.wysiwyg-content-area .ProseMirror ul,
+.wysiwyg-content-area .ProseMirror ol {
+	padding-left: 24px;
+	margin-bottom: 12px;
+}
+
+.wysiwyg-content-area .ProseMirror li {
+	margin-bottom: 4px;
+}
+
+.wysiwyg-content-area .ProseMirror a {
+	color: #105289;
+	text-decoration: none;
+}
+
+.wysiwyg-content-area .ProseMirror a:hover {
+	text-decoration: underline;
+}
+
+.wysiwyg-content-area .ProseMirror img {
+	max-width: 100%;
+	height: auto;
+}
+
+.wysiwyg-content-area .ProseMirror img.smiley {
+	vertical-align: middle;
+	display: inline-block;
+	max-width: none;
+}
+
+.wysiwyg-content-area .ProseMirror span[data-bbcode]:not([data-bbcode="size"]):not([data-bbcode="color"]):not([data-bbcode="align"]):not([data-bbcode="highlight"]) {
+	background-color: #eaf4fc;
+	border: 1px dashed #3f9cdb;
+	padding: 1px 4px;
+	border-radius: 3px;
+	color: #0b5894;
+}
+
+
+/* Hide native format buttons panel and original textarea when WYSIWYG editor is active to avoid FOUC and caret injection mismatch */
+.wysiwyg-active #format-buttons,
+.wysiwyg-active #message,
+.wysiwyg-active #signature,
+.wysiwyg-active textarea[data-bbcode="true"] {
+	display: none !important;
+}
+
+/* Adjust posting page editor layout when WYSIWYG is active */
+.wysiwyg-active #message-box {
+	width: 100% !important;
+}
+
+/* Attachment styling inside editor */
+.ProseMirror .wysiwyg-attachment {
+	display: block;
+	background-color: #f5f5f5;
+	border: 1px solid #d3d3d3;
+	border-radius: 4px;
+	padding: 8px 12px;
+	margin: 10px 0;
+	font-family: inherit;
+	font-size: 13px;
+	color: #555555;
+	cursor: default;
+	user-select: none;
+}
+
+.ProseMirror .wysiwyg-attachment::before {
+	content: "📎 ";
+}
+
+.ProseMirror .wysiwyg-attachment:hover {
+	background-color: #ededed;
+	border-color: #c5c5c5;
+}
+
+/* Spoiler details styling */
+.ProseMirror details[data-bbcode="spoiler"] {
+	border: 1px solid #dbdbdb;
+	border-radius: 4px;
+	background-color: #fafafa;
+	padding: 8px 12px;
+	margin: 10px 0;
+}
+
+.ProseMirror details[data-bbcode="spoiler"] summary {
+	font-weight: bold;
+	cursor: pointer;
+	outline: none;
+	color: #2c3e50;
+}
+
+/* Table styling */
+.ProseMirror table {
+	border-collapse: collapse;
+	margin: 10px 0;
+	width: 100%;
+}
+
+.ProseMirror th, .ProseMirror td {
+	border: 1px solid #dbdbdb;
+	padding: 6px 10px;
+	text-align: left;
+}
+
+.ProseMirror tr:nth-child(even) {
+	background-color: #fafafa;
+}
+
+/* Editor footer and character count styling */
+.wysiwyg-footer {
+	display: flex;
+	justify-content: flex-end;
+	padding: 6px 12px;
+	background-color: #f7f7f7;
+	border-top: 1px solid #c5c5c5;
+}
+
+.wysiwyg-char-count {
+	font-size: 11px;
+	color: #666666;
+}
+
+/* Custom select dropdown styling in toolbar */
+.wysiwyg-select {
+	background: #ffffff;
+	border: 1px solid #d3d3d3;
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 12px;
+	color: #333333;
+	margin-right: 6px;
+	height: 28px;
+	outline: none;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	transition: border-color 0.15s ease;
+}
+
+.wysiwyg-select:focus {
+	border-color: #999999;
+}
+
+/* Color picker floating grid widget */
+.wysiwyg-color-picker-container {
+	position: relative;
+	display: inline-block;
+}
+
+.wysiwyg-color-palette {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	z-index: 1000;
+	background: #ffffff;
+	border: 1px solid #d3d3d3;
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	padding: 10px;
+	width: 210px;
+	margin-top: 5px;
+}
+
+.wysiwyg-color-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.wysiwyg-color-box {
+	width: 22px;
+	height: 22px;
+	border-radius: 4px;
+	border: 1px solid #e0e0e0;
+	cursor: pointer;
+	transition: transform 0.1s ease, border-color 0.1s ease;
+}
+
+.wysiwyg-color-box:hover {
+	transform: scale(1.15);
+	border-color: #999999;
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.15);
+}
+
+.wysiwyg-clear-color-btn {
+	display: block;
+	width: 100%;
+	background: #f5f5f5;
+	border: 1px solid #d3d3d3;
+	border-radius: 4px;
+	padding: 6px;
+	font-size: 11px;
+	font-weight: bold;
+	color: #555555;
+	cursor: pointer;
+	text-align: center;
+	transition: background 0.1s ease;
+}
+
+.wysiwyg-clear-color-btn:hover {
+	background: #e5e5e5;
+	color: #333333;
+}
+
+
+
+.ProseMirror .codebox {
+	padding: 3px;
+	background-color: #FFFFFF;
+	border: 1px solid #C9D2D8;
+	font-size: 1em;
+	font-family: Monaco, "Andale Mono", "Courier New", Courier, mono;
+	margin: 1em 0;
+}
+
+.ProseMirror .codebox p {
+	font-family: "Lucida Grande", "Trebuchet MS", Verdana, Helvetica, Arial, sans-serif;
+	font-size: 0.85em;
+	margin: 0 0 2px 0;
+	padding: 2px 5px;
+	border-bottom: 1px dashed #C9D2D8;
+}
+
+.ProseMirror .codebox pre {
+	overflow: auto;
+	font-family: Monaco, "Andale Mono", "Courier New", Courier, mono;
+	font-size: 0.9em;
+	padding: 5px;
+	margin: 0;
+}
+
+.ProseMirror .codebox code {
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
+/* Custom Dropdown styling */
+.wysiwyg-dropdown {
+	position: relative;
+	display: inline-block;
+}
+
+.btn-heading-toggle,
+.btn-list-toggle,
+.btn-size-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 36px;
+	height: 28px;
+	padding: 4px;
+	gap: 2px;
+}
+
+.wysiwyg-dropdown-menu {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	z-index: 1000;
+	display: none;
+	min-width: 140px;
+	padding: 5px 0;
+	margin: 2px 0 0;
+	font-size: 13px;
+	text-align: left;
+	list-style: none;
+	background-color: #fff;
+	background-clip: padding-box;
+	border: 1px solid rgba(0,0,0,.15);
+	border-radius: 4px;
+	box-shadow: 0 6px 12px rgba(0,0,0,.175);
+}
+
+.wysiwyg-dropdown-item {
+	display: block;
+	width: 100%;
+	padding: 6px 20px;
+	clear: both;
+	font-weight: 400;
+	color: #333;
+	text-align: inherit;
+	white-space: nowrap;
+	background-color: transparent;
+	border: 0;
+	cursor: pointer;
+}
+
+.wysiwyg-dropdown-item:hover {
+	color: #262626;
+	background-color: #f5f5f5;
+}
+
+.wysiwyg-caret {
+	display: inline-block;
+	width: 0;
+	height: 0;
+	margin-left: 2px;
+	vertical-align: middle;
+	border-top: 3px solid #555;
+	border-right: 3px solid transparent;
+	border-left: 3px solid transparent;
+}
+
+.wysiwyg-dropdown-label {
+	display: inline-block;
+	vertical-align: middle;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Highlight style override */
+.wysiwyg-content-area .ProseMirror mark {
+	background-color: #ffff00 !important;
+	color: #000000 !important;
+	border-radius: 2px;
+	padding: 0 2px;
+}
+
+/* Dropdown button SVG icons alignment */
+.btn-heading-toggle svg,
+.btn-list-toggle svg,
+.btn-size-toggle svg {
+	width: 16px;
+	height: 16px;
+	vertical-align: middle;
+	fill: #555;
+	flex-shrink: 0;
+}
+
+/* Prevent headings from inheriting white color in prosilver */
+.postbody .content h1,
+.postbody .content h2,
+.postbody .content h3,
+.postbody .content h4,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4 {
+	color: #333333 !important;
+}

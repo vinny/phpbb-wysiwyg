@@ -1,0 +1,42 @@
+{% INCLUDE 'overall_header.html' %}
+
+<a id="maincontent"></a>
+
+<h1>{{ lang('ACP_WYSIWYG_SETTINGS') }}</h1>
+
+<p>{{ lang('ACP_WYSIWYG_SETTINGS_EXPLAIN') }}</p>
+
+<form id="acp_wysiwyg" method="post" action="{{ U_ACTION }}">
+	<fieldset>
+		<legend>{{ lang('ACP_WYSIWYG_LEGEND') }}</legend>
+		<dl>
+			<dt><label for="wysiwyg_enabled">{{ lang('ACP_WYSIWYG_ENABLED') }}:</label><br /><span>{{ lang('ACP_WYSIWYG_ENABLED_EXPLAIN') }}</span></dt>
+			<dd>
+				<label><input type="radio" class="radio" name="wysiwyg_enabled" value="1" {% if WYSIWYG_ENABLED %}checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" name="wysiwyg_enabled" value="0" {% if not WYSIWYG_ENABLED %}checked="checked"{% endif %} /> {{ lang('NO') }}</label>
+			</dd>
+		</dl>
+		<dl>
+			<dt><label for="wysiwyg_default_enabled">{{ lang('ACP_WYSIWYG_DEFAULT') }}:</label><br /><span>{{ lang('ACP_WYSIWYG_DEFAULT_EXPLAIN') }}</span></dt>
+			<dd>
+				<label><input type="radio" class="radio" name="wysiwyg_default_enabled" value="1" {% if WYSIWYG_DEFAULT_ENABLED %}checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" name="wysiwyg_default_enabled" value="0" {% if not WYSIWYG_DEFAULT_ENABLED %}checked="checked"{% endif %} /> {{ lang('NO') }}</label>
+			</dd>
+		</dl>
+		<dl>
+			<dt><label for="wysiwyg_allow_toggle">{{ lang('ACP_WYSIWYG_ALLOW_TOGGLE') }}:</label><br /><span>{{ lang('ACP_WYSIWYG_ALLOW_TOGGLE_EXPLAIN') }}</span></dt>
+			<dd>
+				<label><input type="radio" class="radio" name="wysiwyg_allow_toggle" value="1" {% if WYSIWYG_ALLOW_TOGGLE %}checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" name="wysiwyg_allow_toggle" value="0" {% if not WYSIWYG_ALLOW_TOGGLE %}checked="checked"{% endif %} /> {{ lang('NO') }}</label>
+			</dd>
+		</dl>
+
+		<p class="submit-buttons">
+			<input class="button1" type="submit" id="submit" name="submit" value="{{ lang('SUBMIT') }}" />&nbsp;
+			<input class="button2" type="reset" id="reset" name="reset" value="{{ lang('RESET') }}" />
+		</p>
+		{{ S_FORM_TOKEN }}
+	</fieldset>
+</form>
+
+{% INCLUDE 'overall_footer.html' %}

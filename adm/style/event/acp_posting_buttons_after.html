@@ -1,0 +1,9 @@
+{% if S_WYSIWYG_ENABLED %}
+	<script>
+		document.body.classList.add('wysiwyg-active');
+	</script>
+
+	<div id="wysiwyg-editor-container" style="display: none;" data-toggle-enabled="{{ S_WYSIWYG_TOGGLE ? '1' : '0' }}" data-lang="{{ WYSIWYG_LANG_JSON|e('html_attr') }}" data-html-to-bbcode-url="{{ WYSIWYG_HTML_TO_BBCODE_URL }}" data-bbcode-to-html-url="{{ WYSIWYG_BBCODE_TO_HTML_URL }}">
+		<textarea id="wysiwyg-initial-content" style="display: none;"></textarea>
+	</div>
+{% endif %}

@@ -1,0 +1,9 @@
+vinny_wysiwyg_html_to_bbcode:
+    path: /wysiwyg/html_to_bbcode
+    defaults: { _controller: vinny.wysiwyg.controller:html_to_bbcode }
+    methods: [POST]
+
+vinny_wysiwyg_bbcode_to_html:
+    path: /wysiwyg/bbcode_to_html
+    defaults: { _controller: vinny.wysiwyg.controller:bbcode_to_html }
+    methods: [POST]
