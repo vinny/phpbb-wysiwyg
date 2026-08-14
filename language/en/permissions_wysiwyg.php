@@ -18,6 +18,6 @@ if (empty($lang) || !is_array($lang))
 }
 
 $lang = array_merge($lang, [
-	'ACL_U_WYSIWYG_USE'		=> 'Can use WYSIWYG Editor',
-	'ACL_U_WYSIWYG_TOGGLE'	=> 'Can toggle WYSIWYG Editor preference',
+	'ACL_U_WYSIWYG_USE'		=> 'Can use WYSIWYG editor',
+	'ACL_U_WYSIWYG_TOGGLE'	=> 'Can toggle WYSIWYG editor preference',
 ]);

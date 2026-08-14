@@ -234,20 +234,25 @@
 	color: #2c3e50;
 }
 
-/* Table styling */
-.ProseMirror table {
+/* Table styling for posts and editor */
+.ProseMirror table,
+table[data-bbcode="table"] {
 	border-collapse: collapse;
 	margin: 10px 0;
 	width: 100%;
 }
 
-.ProseMirror th, .ProseMirror td {
+.ProseMirror th,
+.ProseMirror td,
+table[data-bbcode="table"] td,
+table[data-bbcode="table"] th {
 	border: 1px solid #dbdbdb;
 	padding: 6px 10px;
 	text-align: left;
 }
 
-.ProseMirror tr:nth-child(even) {
+.ProseMirror tr:nth-child(even),
+table[data-bbcode="table"] tr:nth-child(even) {
 	background-color: #fafafa;
 }
 
