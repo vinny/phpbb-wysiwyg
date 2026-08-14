@@ -7,7 +7,6 @@ Replaces the native BBCode text editor with a visual editor built on TipTap. Con
 - **Decoupled parser:** Converts BBCode to HTML for editing in the browser, and translates it back to BBCode when saving.
 - **Global configuration:** Enable the editor globally, configure defaults, and allow users to toggle it on or off in the ACP.
 - **User preferences:** Let users select their preferred editor interface in their posting settings.
-- **Permissions:** Manage which users and groups can use the editor or switch between editors via `u_wysiwyg_use` and `u_wysiwyg_toggle`.
 - **Local assets:** Editor scripts are bundled locally. Zero external CDN dependencies.
 - **Fallback support:** Seamlessly reverts to the native phpBB textarea if JavaScript is disabled or fails to load.
 

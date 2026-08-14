@@ -74,10 +74,7 @@ class main_listener_test extends \phpbb_test_case
 	protected $listener;
 	protected $request;
 	protected $converter;
-	protected $config;
-	protected $user;
 	protected $template;
-	protected $auth;
 
 	public function setUp(): void
 	{
@@ -92,7 +89,6 @@ class main_listener_test extends \phpbb_test_case
 		];
 		$this->user = new DummyUser();
 		$this->template = new DummyTemplate();
-		$this->auth = new DummyAuth();
 
 		$this->helper = new DummyHelper();
 
@@ -102,7 +98,6 @@ class main_listener_test extends \phpbb_test_case
 			$this->config,
 			$this->user,
 			$this->template,
-			$this->auth,
 			$this->helper
 		);
 	}
@@ -118,7 +113,6 @@ class main_listener_test extends \phpbb_test_case
 		$this->assertArrayHasKey('core.adm_page_header', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_data', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_update_data', $events);
-		$this->assertArrayHasKey('core.permissions', $events);
 	}
 
 	public function test_on_user_setup()
@@ -127,9 +121,8 @@ class main_listener_test extends \phpbb_test_case
 
 		$this->listener->on_user_setup($event);
 
-		$this->assertCount(2, $this->user->loaded_langs);
+		$this->assertCount(1, $this->user->loaded_langs);
 		$this->assertEquals(['vinny/wysiwyg', 'info_acp_wysiwyg'], $this->user->loaded_langs[0]);
-		$this->assertEquals(['vinny/wysiwyg', 'permissions_wysiwyg'], $this->user->loaded_langs[1]);
 	}
 
 	public function test_on_s9e_parse_before_wysiwyg_not_used()
@@ -159,8 +152,6 @@ class main_listener_test extends \phpbb_test_case
 
 	public function test_on_posting_modify_template_vars()
 	{
-		$this->auth->acl['u_wysiwyg_use'] = true;
-		$this->auth->acl['u_wysiwyg_toggle'] = true;
 		
 		$message_parser = new \stdClass();
 		$message_parser->message = '[b]Hello[/b]';

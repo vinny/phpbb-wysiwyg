@@ -28,29 +28,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 			['config.add', ['wysiwyg_default_enabled', 1]],
 			['config.add', ['wysiwyg_allow_toggle', 1]],
 
-			// Add global user permissions
-			['permission.add', ['u_wysiwyg_use', true]],
-			['permission.add', ['u_wysiwyg_toggle', true]],
 
-			// Set default permission values for standard user role
-			['permission.permission_set', ['ROLE_USER_STANDARD', 'u_wysiwyg_use', 'role', true]],
-			['permission.permission_set', ['ROLE_USER_STANDARD', 'u_wysiwyg_toggle', 'role', true]],
-
-			// Set default permission values for full admin role
-			['permission.permission_set', ['ROLE_ADMIN_FULL', 'u_wysiwyg_use', 'role', true]],
-			['permission.permission_set', ['ROLE_ADMIN_FULL', 'u_wysiwyg_toggle', 'role', true]],
-
-			// Set default permission values for Administrators group
-			['permission.permission_set', ['ADMINISTRATORS', 'u_wysiwyg_use', 'group', true]],
-			['permission.permission_set', ['ADMINISTRATORS', 'u_wysiwyg_toggle', 'group', true]],
-
-			// Set default permission values for Global Moderators group
-			['permission.permission_set', ['GLOBAL_MODERATORS', 'u_wysiwyg_use', 'group', true]],
-			['permission.permission_set', ['GLOBAL_MODERATORS', 'u_wysiwyg_toggle', 'group', true]],
-
-			// Set default permission values for Registered Users group
-			['permission.permission_set', ['REGISTERED', 'u_wysiwyg_use', 'group', true]],
-			['permission.permission_set', ['REGISTERED', 'u_wysiwyg_toggle', 'group', true]],
 
 			// Add ACP module under Extensions tab (ACP_CAT_DOT_MODS)
 			['module.add', [
@@ -79,8 +57,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 			['config.remove', ['wysiwyg_default_enabled']],
 			['config.remove', ['wysiwyg_allow_toggle']],
 
-			['permission.remove', ['u_wysiwyg_use']],
-			['permission.remove', ['u_wysiwyg_toggle']],
+
 
 			['module.remove', [
 				'acp',

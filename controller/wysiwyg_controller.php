@@ -27,9 +27,6 @@ class wysiwyg_controller
 	/** @var config */
 	protected $config;
 
-	/** @var auth */
-	protected $auth;
-
 	/** @var user */
 	protected $user;
 
@@ -39,15 +36,13 @@ class wysiwyg_controller
 	* @param request_interface $request
 	* @param converter $converter
 	* @param config $config
-	* @param auth $auth
 	* @param user $user
 	*/
-	public function __construct($request, $converter, $config, $auth, $user)
+	public function __construct($request, $converter, $config, $user)
 	{
 		$this->request = $request;
 		$this->converter = $converter;
 		$this->config = $config;
-		$this->auth = $auth;
 		$this->user = $user;
 	}
 
@@ -58,7 +53,7 @@ class wysiwyg_controller
 	*/
 	public function html_to_bbcode()
 	{
-		if (empty($this->config['wysiwyg_enabled']) || !$this->auth->acl_get('u_wysiwyg_use'))
+		if (empty($this->config['wysiwyg_enabled']))
 		{
 			return new JsonResponse(['error' => $this->user->lang('WYSIWYG_DISABLED')], 403);
 		}
@@ -76,7 +71,7 @@ class wysiwyg_controller
 	*/
 	public function bbcode_to_html()
 	{
-		if (empty($this->config['wysiwyg_enabled']) || !$this->auth->acl_get('u_wysiwyg_use'))
+		if (empty($this->config['wysiwyg_enabled']))
 		{
 			return new JsonResponse(['error' => $this->user->lang('WYSIWYG_DISABLED')], 403);
 		}

@@ -19,7 +19,7 @@ if (empty($lang) || !is_array($lang))
 
 $lang = array_merge($lang, [
 	'ACP_WYSIWYG_TITLE'					=> 'WYSIWYG editor',
-	'ACP_WYSIWYG_SETTINGS'				=> 'WYSIWYG editor settings',
+	'ACP_WYSIWYG_SETTINGS'				=> 'Settings',
 	'ACP_WYSIWYG_SETTINGS_EXPLAIN'		=> 'Configure options for the WYSIWYG editor extension. Users can also configure their preferences in the User Control Panel.',
 	'ACP_WYSIWYG_LEGEND'				=> 'Global editor settings',
 	'ACP_WYSIWYG_ENABLED'				=> 'Enable WYSIWYG editor',

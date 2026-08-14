@@ -58,7 +58,6 @@ class wysiwyg_controller_test extends \phpbb_test_case
 	protected $request;
 	protected $converter;
 	protected $config;
-	protected $auth;
 	protected $user;
 
 	public function setUp(): void
@@ -69,14 +68,12 @@ class wysiwyg_controller_test extends \phpbb_test_case
 		$this->converter = new DummyConverter();
 		$this->config = new DummyConfig();
 		$this->config['wysiwyg_enabled'] = 1;
-		$this->auth = new DummyAuth();
 		$this->user = new DummyUser();
 
 		$this->controller = new \vinny\wysiwyg\controller\wysiwyg_controller(
 			$this->request,
 			$this->converter,
 			$this->config,
-			$this->auth,
 			$this->user
 		);
 	}
@@ -89,17 +86,8 @@ class wysiwyg_controller_test extends \phpbb_test_case
 		$this->assertEquals(403, $response->getStatusCode());
 	}
 
-	public function test_html_to_bbcode_no_permission()
-	{
-		$this->auth->acl['u_wysiwyg_use'] = false;
-		$response = $this->controller->html_to_bbcode();
-		$this->assertInstanceOf('Symfony\Component\HttpFoundation\JsonResponse', $response);
-		$this->assertEquals(403, $response->getStatusCode());
-	}
-
 	public function test_html_to_bbcode_success()
 	{
-		$this->auth->acl['u_wysiwyg_use'] = true;
 		$this->request->vars['html'] = '<p>test</p>';
 		$this->converter->bbcodeToReturn = 'test';
 
@@ -117,17 +105,8 @@ class wysiwyg_controller_test extends \phpbb_test_case
 		$this->assertEquals(403, $response->getStatusCode());
 	}
 
-	public function test_bbcode_to_html_no_permission()
-	{
-		$this->auth->acl['u_wysiwyg_use'] = false;
-		$response = $this->controller->bbcode_to_html();
-		$this->assertInstanceOf('Symfony\Component\HttpFoundation\JsonResponse', $response);
-		$this->assertEquals(403, $response->getStatusCode());
-	}
-
 	public function test_bbcode_to_html_success()
 	{
-		$this->auth->acl['u_wysiwyg_use'] = true;
 		$this->request->vars['bbcode'] = 'test';
 		$this->converter->htmlToReturn = '<p>test</p>';
 

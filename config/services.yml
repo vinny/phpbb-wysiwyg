@@ -13,7 +13,6 @@ services:
             - '@request'
             - '@vinny.wysiwyg.text_formatter.converter'
             - '@config'
-            - '@auth'
             - '@user'
 
     vinny.wysiwyg.listener:
@@ -24,7 +23,6 @@ services:
             - '@config'
             - '@user'
             - '@template'
-            - '@auth'
             - '@controller.helper'
         tags:
             - { name: event.listener }

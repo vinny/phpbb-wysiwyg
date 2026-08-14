@@ -28,9 +28,6 @@ class main_listener implements EventSubscriberInterface
 	/** @var \phpbb\template\template */
 	protected $template;
 
-	/** @var \phpbb\auth\auth */
-	protected $auth;
-
 	/** @var \phpbb\controller\helper */
 	protected $helper;
 
@@ -42,17 +39,15 @@ class main_listener implements EventSubscriberInterface
 	* @param \phpbb\config\config $config
 	* @param \phpbb\user $user
 	* @param \phpbb\template\template $template
-	* @param \phpbb\auth\auth $auth
 	* @param \phpbb\controller\helper $helper
 	*/
-	public function __construct($request, $converter, $config, $user, $template, $auth, $helper)
+	public function __construct($request, $converter, $config, $user, $template, $helper)
 	{
 		$this->request = $request;
 		$this->converter = $converter;
 		$this->config = $config;
 		$this->user = $user;
 		$this->template = $template;
-		$this->auth = $auth;
 		$this->helper = $helper;
 	}
 
@@ -70,7 +65,6 @@ class main_listener implements EventSubscriberInterface
 			'core.adm_page_header'					=> 'on_adm_page_header',
 			'core.ucp_prefs_post_data'				=> 'on_ucp_prefs_post_data',
 			'core.ucp_prefs_post_update_data'		=> 'on_ucp_prefs_post_update_data',
-			'core.permissions'						=> 'on_permissions',
 		];
 	}
 
@@ -171,12 +165,7 @@ class main_listener implements EventSubscriberInterface
 	*/
 	protected function is_user_wysiwyg_enabled()
 	{
-		if (!$this->auth->acl_get('u_wysiwyg_use'))
-		{
-			return false;
-		}
-
-		if (empty($this->config['wysiwyg_allow_toggle']) || !$this->auth->acl_get('u_wysiwyg_toggle'))
+		if (empty($this->config['wysiwyg_allow_toggle']))
 		{
 			return (bool) $this->config['wysiwyg_default_enabled'];
 		}
@@ -282,7 +271,7 @@ class main_listener implements EventSubscriberInterface
 			return;
 		}
 
-		if (empty($this->config['wysiwyg_allow_toggle']) || !$this->auth->acl_get('u_wysiwyg_toggle'))
+		if (empty($this->config['wysiwyg_allow_toggle']))
 		{
 			return;
 		}
@@ -308,7 +297,7 @@ class main_listener implements EventSubscriberInterface
 			return;
 		}
 
-		if (empty($this->config['wysiwyg_allow_toggle']) || !$this->auth->acl_get('u_wysiwyg_toggle'))
+		if (empty($this->config['wysiwyg_allow_toggle']))
 		{
 			return;
 		}
@@ -320,34 +309,8 @@ class main_listener implements EventSubscriberInterface
 		$event['sql_ary'] = $sql_ary;
 	}
 
-	/**
-	* Register custom user permissions
-	*
-	* @param \phpbb\event\data $event
-	* @return void
-	*/
-	public function on_permissions($event)
-	{
-		$event->update_subarray('permissions', 'u_wysiwyg_use', [
-			'lang'	=> 'ACL_U_WYSIWYG_USE',
-			'cat'	=> 'post',
-		]);
-
-		$event->update_subarray('permissions', 'u_wysiwyg_toggle', [
-			'lang'	=> 'ACL_U_WYSIWYG_TOGGLE',
-			'cat'	=> 'post',
-		]);
-	}
-
-	/**
-	* Load extension language files
-	*
-	* @param \phpbb\event\data $event
-	* @return void
-	*/
 	public function on_user_setup($event)
 	{
 		$this->user->add_lang_ext('vinny/wysiwyg', 'info_acp_wysiwyg');
-		$this->user->add_lang_ext('vinny/wysiwyg', 'permissions_wysiwyg');
 	}
 }
