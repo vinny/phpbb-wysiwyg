@@ -12,7 +12,6 @@ namespace vinny\wysiwyg\controller;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use phpbb\request\request_interface;
 use phpbb\config\config;
-use phpbb\auth\auth;
 use phpbb\user;
 use vinny\wysiwyg\text_formatter\converter;
 
