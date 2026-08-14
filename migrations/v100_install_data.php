@@ -28,8 +28,6 @@ class v100_install_data extends \phpbb\db\migration\migration
 			['config.add', ['wysiwyg_default_enabled', 1]],
 			['config.add', ['wysiwyg_allow_toggle', 1]],
 
-
-
 			// Add ACP module under Extensions tab (ACP_CAT_DOT_MODS)
 			['module.add', [
 				'acp',
@@ -56,8 +54,6 @@ class v100_install_data extends \phpbb\db\migration\migration
 			['config.remove', ['wysiwyg_enabled']],
 			['config.remove', ['wysiwyg_default_enabled']],
 			['config.remove', ['wysiwyg_allow_toggle']],
-
-
 
 			['module.remove', [
 				'acp',
