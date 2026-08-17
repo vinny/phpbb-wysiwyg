@@ -5,7 +5,8 @@ services:
             - '@dbal.conn'
             - '@config'
             - '%core.root_path%'
-            - '@service_container'
+            - '@text_formatter.parser'
+            - '@language'
 
     vinny.wysiwyg.controller:
         class: vinny\wysiwyg\controller\wysiwyg_controller

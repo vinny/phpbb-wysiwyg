@@ -24,7 +24,7 @@ Replaces the native BBCode text editor with a visual editor built on TipTap. Con
 ## Configuration
 
 ### Admin Control Panel (ACP)
-Configure options in **ACP** -> **Customise** -> **WYSIWYG editor**:
+Configure options in **ACP** -> **Extensions** -> **WYSIWYG editor**:
 - **Enable WYSIWYG editor**: Toggle the visual editor for the entire board.
 - **Enabled by default**: Set the visual editor as the default for new users and guests.
 - **Allow toggling**: Let users override the default setting and switch back to the plain BBCode editor.
@@ -49,6 +49,10 @@ To modify the editor source code:
    npm run build
    ```
 
+## Support
+
+If you find this extension useful, you can support its development on [Ko-fi](https://ko-fi.com/vinny1).
+
 ## License
 
-GPL-2.0-only
+[![License](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](license.txt)

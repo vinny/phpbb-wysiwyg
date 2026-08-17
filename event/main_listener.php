@@ -65,6 +65,7 @@ class main_listener implements EventSubscriberInterface
 			'core.adm_page_header'					=> 'on_adm_page_header',
 			'core.ucp_prefs_post_data'				=> 'on_ucp_prefs_post_data',
 			'core.ucp_prefs_post_update_data'		=> 'on_ucp_prefs_post_update_data',
+			'core.user_add_modify_data'				=> 'on_user_add_modify_data',
 		];
 	}
 
@@ -165,11 +166,6 @@ class main_listener implements EventSubscriberInterface
 	*/
 	protected function is_user_wysiwyg_enabled()
 	{
-		if (empty($this->config['wysiwyg_allow_toggle']))
-		{
-			return (bool) $this->config['wysiwyg_default_enabled'];
-		}
-
 		if (!$this->user->data['is_registered'])
 		{
 			return (bool) $this->config['wysiwyg_default_enabled'];
@@ -271,11 +267,6 @@ class main_listener implements EventSubscriberInterface
 			return;
 		}
 
-		if (empty($this->config['wysiwyg_allow_toggle']))
-		{
-			return;
-		}
-
 		$user_wysiwyg_enabled = isset($this->user->data['user_wysiwyg_enabled']) ? $this->user->data['user_wysiwyg_enabled'] : $this->config['wysiwyg_default_enabled'];
 
 		$this->template->assign_vars([
@@ -297,16 +288,27 @@ class main_listener implements EventSubscriberInterface
 			return;
 		}
 
-		if (empty($this->config['wysiwyg_allow_toggle']))
-		{
-			return;
-		}
-
 		$user_wysiwyg_enabled = $this->request->variable('user_wysiwyg_enabled', (int) $this->config['wysiwyg_default_enabled']);
 
 		$sql_ary = $event['sql_ary'];
 		$sql_ary['user_wysiwyg_enabled'] = $user_wysiwyg_enabled;
 		$event['sql_ary'] = $sql_ary;
+	}
+
+	/**
+	* Set default WYSIWYG preference when adding a new user
+	*
+	* @param \phpbb\event\data $event
+	* @return void
+	*/
+	public function on_user_add_modify_data($event)
+	{
+		$user_row = $event['user_row'];
+		if (!isset($user_row['user_wysiwyg_enabled']))
+		{
+			$user_row['user_wysiwyg_enabled'] = (int) $this->config['wysiwyg_default_enabled'];
+			$event['user_row'] = $user_row;
+		}
 	}
 
 	public function on_user_setup($event)

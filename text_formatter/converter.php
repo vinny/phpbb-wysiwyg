@@ -23,8 +23,8 @@ class converter
 	/** @var \phpbb\textformatter\parser_interface */
 	protected $parser;
 
-	/** @var \Symfony\Component\DependencyInjection\ContainerInterface */
-	protected $container;
+	/** @var \phpbb\language\language */
+	protected $language;
 
 	/** @var array|null */
 	protected $smilies_cache = null;
@@ -35,14 +35,16 @@ class converter
 	* @param \phpbb\db\driver\driver_interface $db
 	* @param \phpbb\config\config $config
 	* @param string $phpbb_root_path
-	* @param \Symfony\Component\DependencyInjection\ContainerInterface $container
+	* @param \phpbb\textformatter\parser_interface $parser
+	* @param \phpbb\language\language $language
 	*/
-	public function __construct($db, $config, $phpbb_root_path, $container)
+	public function __construct($db, $config, $phpbb_root_path, $parser, $language)
 	{
 		$this->db = $db;
 		$this->config = $config;
 		$this->phpbb_root_path = $phpbb_root_path;
-		$this->container = $container;
+		$this->parser = $parser;
+		$this->language = $language;
 	}
 
 	/**
@@ -52,10 +54,6 @@ class converter
 	*/
 	protected function getParser()
 	{
-		if ($this->parser === null)
-		{
-			$this->parser = $this->container->get('text_formatter.parser');
-		}
 		return $this->parser;
 	}
 
@@ -72,11 +70,29 @@ class converter
 			return '';
 		}
 
+		// If already s9e XML (from message_parser in quote/edit mode), skip re-parsing
+		if ($this->isS9eXml($bbcode))
+		{
+			return $this->xmlToHtml($bbcode);
+		}
+
 		// Parse BBCode to XML using phpBB parser
 		$xml = $this->getParser()->parse($bbcode);
 
 		// Convert XML to TipTap HTML
 		return $this->xmlToHtml($xml);
+	}
+
+	/**
+	* Check if a string is already s9e XML (starts with <r> or <t> root element)
+	*
+	* @param string $text
+	* @return bool
+	*/
+	protected function isS9eXml($text)
+	{
+		$trimmed = ltrim($text);
+		return (strncmp($trimmed, '<r>', 3) === 0 || strncmp($trimmed, '<t>', 3) === 0);
 	}
 
 	/**
@@ -133,11 +149,78 @@ class converter
 
 		$this->convertNodes($dom->documentElement, $html_dom, $root);
 
-		// Output HTML content inside the wrapper div
-		$html = '';
+		// Structure inline elements and line breaks into proper TipTap paragraphs
+		$tiptap_dom = new \DOMDocument();
+		$tiptap_root = $tiptap_dom->createElement('div');
+		$tiptap_dom->appendChild($tiptap_root);
+
+		$is_block = function(\DOMNode $node) {
+			if ($node->nodeType !== XML_ELEMENT_NODE)
+			{
+				return false;
+			}
+			$tag = strtolower($node->nodeName);
+			return in_array($tag, ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'div', 'table', 'ul', 'ol', 'pre', 'details', 'hr']);
+		};
+
+		$current_p = null;
+		$flush_p = function() use (&$current_p, $tiptap_root) {
+			if ($current_p !== null)
+			{
+				if ($current_p->hasChildNodes())
+				{
+					$tiptap_root->appendChild($current_p);
+				}
+				$current_p = null;
+			}
+		};
+
+		$nodes = [];
 		foreach ($root->childNodes as $child)
 		{
-			$html .= $html_dom->saveHTML($child);
+			$nodes[] = $child;
+		}
+
+		foreach ($nodes as $child)
+		{
+			if ($child->nodeType === XML_ELEMENT_NODE && (strtolower($child->nodeName) === 'br'))
+			{
+				if ($current_p !== null)
+				{
+					// If inside a paragraph, the first <br> closes it to start the next line
+					$flush_p();
+				}
+				else
+				{
+					// If outside any paragraph (already closed or after a block), this <br> is an explicit blank line!
+					$empty_p = $tiptap_dom->createElement('p');
+					$empty_p->appendChild($tiptap_dom->createElement('br'));
+					$tiptap_root->appendChild($empty_p);
+				}
+				continue;
+			}
+
+			if ($is_block($child))
+			{
+				$flush_p();
+				$tiptap_root->appendChild($tiptap_dom->importNode($child, true));
+			}
+			else
+			{
+				if ($current_p === null)
+				{
+					$current_p = $tiptap_dom->createElement('p');
+				}
+				$current_p->appendChild($tiptap_dom->importNode($child, true));
+			}
+		}
+		$flush_p();
+
+		// Output HTML content inside the wrapper div
+		$html = '';
+		foreach ($tiptap_root->childNodes as $child)
+		{
+			$html .= $tiptap_dom->saveHTML($child);
 		}
 
 		return $html;
@@ -153,11 +236,26 @@ class converter
 	*/
 	protected function convertNodes(\DOMNode $node, \DOMDocument $html_dom, \DOMNode $parent)
 	{
+		$last_was_br = false;
+
 		foreach ($node->childNodes as $child)
 		{
 			if ($child->nodeType === XML_TEXT_NODE)
 			{
 				$text = $child->nodeValue;
+
+				// In s9e XML, newlines immediately following <br/> are redundant formatting artifacts
+				if ($last_was_br && strncmp($text, "\n", 1) === 0)
+				{
+					$text = substr($text, 1);
+				}
+				$last_was_br = false;
+
+				if ($text === '')
+				{
+					continue;
+				}
+
 				$lines = explode("\n", $text);
 				foreach ($lines as $index => $line)
 				{
@@ -165,7 +263,10 @@ class converter
 					{
 						$parent->appendChild($html_dom->createElement('br'));
 					}
-					$parent->appendChild($html_dom->createTextNode($line));
+					if ($line !== '')
+					{
+						$parent->appendChild($html_dom->createTextNode($line));
+					}
 				}
 				continue;
 			}
@@ -179,6 +280,16 @@ class converter
 				{
 					continue;
 				}
+
+				if ($tag_name === 'br' || $tag_name === 'BR')
+				{
+					$el = $html_dom->createElement('br');
+					$parent->appendChild($el);
+					$last_was_br = true;
+					continue;
+				}
+
+				$last_was_br = false;
 
 				switch ($tag_name)
 				{
@@ -228,8 +339,16 @@ class converter
 
 					case 'ALIGN':
 						$align = $child->getAttribute('align');
+						if (!$align && $child->hasAttribute('val'))
+						{
+							$align = $child->getAttribute('val');
+						}
+						if (!$align)
+						{
+							$align = 'center';
+						}
 						$el = $html_dom->createElement('div');
-						$el->setAttribute('style', 'text-align: ' . $align);
+						$el->setAttribute('style', 'text-align: ' . $align . ';');
 						$el->setAttribute('data-bbcode', 'align');
 						$el->setAttribute('data-bbcode-val', $align);
 						$parent->appendChild($el);
@@ -295,15 +414,7 @@ class converter
 						if ($author)
 						{
 							$el->setAttribute('data-author', $author);
-							$wrote = 'escreveu';
-							if ($this->container && method_exists($this->container, 'get'))
-							{
-								$lang_srv = $this->container->get('language');
-								if ($lang_srv && method_exists($lang_srv, 'lang'))
-								{
-									$wrote = $lang_srv->lang('WROTE');
-								}
-							}
+							$wrote = $this->language->lang('WROTE');
 							$cite = $html_dom->createElement('cite', $author . ' ' . $wrote . ':');
 							$div->appendChild($cite);
 						}
@@ -320,9 +431,12 @@ class converter
 						$codebox = $html_dom->createElement('div');
 						$codebox->setAttribute('class', 'codebox');
 
+						$code_label = $this->language->is_set('WYSIWYG_CODE_LABEL') ? $this->language->lang('WYSIWYG_CODE_LABEL') : ($this->language->is_set('CODE') ? $this->language->lang('CODE') : 'Code');
+						$select_all_label = $this->language->is_set('WYSIWYG_SELECT_ALL_CODE') ? $this->language->lang('WYSIWYG_SELECT_ALL_CODE') : ($this->language->is_set('SELECT_ALL_CODE') ? $this->language->lang('SELECT_ALL_CODE') : 'Select all');
+
 						$p = $html_dom->createElement('p');
-						$p->appendChild($html_dom->createTextNode('Código: '));
-						$a = $html_dom->createElement('a', 'Selecionar todos');
+						$p->appendChild($html_dom->createTextNode($code_label . ': '));
+						$a = $html_dom->createElement('a', $select_all_label);
 						$a->setAttribute('href', '#');
 						$a->setAttribute('onclick', 'selectCode(this); return false;');
 						$p->appendChild($a);
@@ -626,15 +740,8 @@ class converter
 							$cite->parentNode->removeChild($cite);
 						}
 
-						$div = $clone->getElementsByTagName('div')->item(0);
-						if ($div)
-						{
-							$inner_bbcode = $this->htmlNodeToBBCode($div);
-						}
-						else
-						{
-							$inner_bbcode = $this->htmlNodeToBBCode($clone);
-						}
+						$inner_bbcode = $this->htmlNodeToBBCode($clone);
+						$inner_bbcode = trim($inner_bbcode);
 
 						$bbcode .= '[quote' . $author_attr . ']' . $inner_bbcode . '[/quote]';
 						break;
@@ -723,6 +830,7 @@ class converter
 					case 'p':
 						$style = $child->getAttribute('style');
 						$inner = $this->htmlNodeToBBCode($child);
+						$inner = rtrim($inner, "\r\n");
 						if ($style && preg_match('/text-align:\s*([^;]+)/', $style, $matches))
 						{
 							$align = trim($matches[1]);

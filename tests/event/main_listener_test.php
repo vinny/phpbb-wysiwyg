@@ -113,6 +113,7 @@ class main_listener_test extends \phpbb_test_case
 		$this->assertArrayHasKey('core.adm_page_header', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_data', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_update_data', $events);
+		$this->assertArrayHasKey('core.user_add_modify_data', $events);
 	}
 
 	public function test_on_user_setup()
@@ -152,7 +153,6 @@ class main_listener_test extends \phpbb_test_case
 
 	public function test_on_posting_modify_template_vars()
 	{
-		
 		$message_parser = new \stdClass();
 		$message_parser->message = '[b]Hello[/b]';
 
@@ -167,5 +167,19 @@ class main_listener_test extends \phpbb_test_case
 		$this->assertArrayHasKey('S_WYSIWYG_ENABLED', $this->template->vars);
 		$this->assertTrue($this->template->vars['S_WYSIWYG_ENABLED']);
 		$this->assertEquals('<strong>Hello</strong>', $this->template->vars['WYSIWYG_CONTENT']);
+	}
+
+	public function test_on_user_add_modify_data()
+	{
+		$event = new \phpbb\event\data([
+			'user_row' => [
+				'username' => 'newuser',
+			],
+		]);
+
+		$this->listener->on_user_add_modify_data($event);
+
+		$this->assertArrayHasKey('user_wysiwyg_enabled', $event['user_row']);
+		$this->assertEquals(1, $event['user_row']['user_wysiwyg_enabled']);
 	}
 }

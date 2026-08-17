@@ -1,0 +1,17 @@
+{
+	"extends": "stylelint-config-standard",
+	"rules": {
+		"color-function-alias-notation": null,
+		"color-function-notation": null,
+		"alpha-value-notation": null,
+		"color-hex-length": null,
+		"value-keyword-case": null,
+		"selector-not-notation": null,
+		"selector-class-pattern": null,
+		"no-descending-specificity": null,
+		"font-family-no-missing-generic-family-keyword": null
+	},
+	"ignoreFiles": [
+		"node_modules/**"
+	]
+}

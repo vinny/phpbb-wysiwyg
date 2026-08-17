@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	const htmlToBbcodeUrl = container ? container.getAttribute('data-html-to-bbcode-url') : '';
 	const bbcodeToHtmlUrl = container ? container.getAttribute('data-bbcode-to-html-url') : '';
+	const allowToggleGlobal = container ? (container.getAttribute('data-toggle-enabled') === '1') : true;
 
 	// Helper to translate key with fallback to English representation
 	function lang(key, fallback = '') {
@@ -141,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	function bootEditor(container, textarea, wysiwygUsed, htmlContent, form) {
 		const wrapper = document.createElement('div');
-		wrapper.className = 'wysiwyg-editor-wrapper';
+		wrapper.className = 'wysiwyg-editor-wrapper inputbox';
 
 		const toolbarEl = document.createElement('div');
 		toolbarEl.className = 'wysiwyg-toolbar';
@@ -352,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
 				return [
 					{
 						tag: 'blockquote',
+						contentElement: dom => dom.querySelector('.quote-content') || dom.querySelector('div > div') || dom.querySelector('div') || dom,
 						getAttrs: dom => {
 							let author = dom.getAttribute('data-author') || dom.getAttribute('author');
 							const cite = dom.querySelector('cite');
@@ -395,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
 							'div',
 							{},
 							['cite', {}, `${author} ${wrote}:`],
-							0
+							['div', { class: 'quote-content' }, 0]
 						]
 					];
 				}
@@ -405,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
 					[
 						'div',
 						{},
-						0
+						['div', { class: 'quote-content' }, 0]
 					]
 				];
 			}
@@ -555,6 +557,13 @@ document.addEventListener('DOMContentLoaded', () => {
 		textarea.value = editor.getHTML();
 		const initialCount = editor.storage.characterCount.characters();
 		charCountEl.textContent = lang('WYSIWYG_CHARACTERS', 'Characters: %d').replace('%d', initialCount);
+
+		// Synchronize on form submit
+		form.addEventListener('submit', () => {
+			if (wysiwygUsed.value === '1') {
+				textarea.value = editor.getHTML();
+			}
+		});
 
 		// Helper to close all dropdown menus
 		function closeAllMenus() {
@@ -785,7 +794,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		colorBtn.type = 'button';
 		colorBtn.className = 'wysiwyg-btn btn-color';
 		colorBtn.title = lang('WYSIWYG_FONT_COLOR', 'Font Color');
-		colorBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M11 3L5.5 17h2.25l1.12-3h6.25l1.12 3h2.25L13 3h-2zm-1.38 9L12 5.67 14.38 12H9.62z"/></svg>';
+		colorBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2C6.49 2 2 6.49 2 12c0 4.41 3.59 8 8 8 1.1 0 2-.9 2-2 0-.46-.17-.89-.47-1.22-.3-.33-.48-.77-.48-1.28 0-1.1.9-2 2-2h2.45C18.44 13.5 22 9.94 22 5.5 22 3.57 20.43 2 18.5 2H12zm-5.5 8c-.83 0-1.5-.67-1.5-1.5S5.67 7 6.5 7s1.5.67 1.5 1.5S7.33 10 6.5 10zm3-4C8.67 6 8 5.33 8 4.5S8.67 3 9.5 3s1.5.67 1.5 1.5S10.33 6 9.5 6zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 3 14.5 3s1.5.67 1.5 1.5S15.33 6 14.5 6zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 7 17.5 7s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg><span class="wysiwyg-color-bar"></span>';
+
+		const colorBar = colorBtn.querySelector('.wysiwyg-color-bar');
 
 		const colorPalette = document.createElement('div');
 		colorPalette.className = 'wysiwyg-color-palette wysiwyg-dropdown-menu';
@@ -833,9 +844,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		function updateColorBtnIndicator(color) {
 			if (color) {
-				colorBtn.style.borderBottom = `3px solid ${color}`;
+				colorBar.style.backgroundColor = color;
 			} else {
-				colorBtn.style.borderBottom = 'none';
+				colorBar.style.backgroundColor = 'currentColor';
 			}
 		}
 
@@ -891,8 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		];
 
 		// Toggle source button
-		const allowToggle = container.id === 'wysiwyg-editor-container' ? (container.getAttribute('data-toggle-enabled') === '1') : true;
-		if (allowToggle) {
+		if (allowToggleGlobal) {
 			buttons.push({ type: 'separator' });
 			buttons.push({
 				name: 'toggleSource',

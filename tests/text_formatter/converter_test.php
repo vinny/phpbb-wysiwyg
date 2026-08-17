@@ -52,16 +52,17 @@ class DummyDB
 	public function sql_freeresult($result) {}
 }
 
-class DummyContainer implements \Symfony\Component\DependencyInjection\ContainerInterface
+class DummyLanguage
 {
-	protected $services = [];
-	public function set($id, $service) { $this->services[$id] = $service; }
-	public function get($id, $invalidBehavior = self::EXCEPTION_ON_INVALID_REFERENCE) { return $this->services[$id]; }
-	public function has($id) { return isset($this->services[$id]); }
-	public function initialized($id) { return true; }
-	public function getParameter($name) {}
-	public function hasParameter($name) {}
-	public function setParameter($name, $value) {}
+	public function lang($key)
+	{
+		$map = [
+			'WROTE' => 'wrote:',
+			'CODE' => 'Code:',
+			'SELECT_ALL_CODE' => 'Select all',
+		];
+		return isset($map[$key]) ? $map[$key] : $key;
+	}
 }
 
 class converter_test extends \phpbb_test_case
@@ -71,7 +72,7 @@ class converter_test extends \phpbb_test_case
 	protected $config;
 	protected $parser;
 	protected $renderer;
-	protected $container;
+	protected $language;
 
 	public function setUp(): void
 	{
@@ -84,14 +85,14 @@ class converter_test extends \phpbb_test_case
 		];
 		$this->parser = new StubParser();
 		$this->renderer = new StubRenderer();
-		$this->container = new DummyContainer();
-		$this->container->set('text_formatter.parser', $this->parser);
+		$this->language = new DummyLanguage();
 
 		$this->converter = new \vinny\wysiwyg\text_formatter\converter(
 			$this->db,
 			$this->config,
 			'./',
-			$this->container
+			$this->parser,
+			$this->language
 		);
 	}
 
@@ -111,14 +112,12 @@ class converter_test extends \phpbb_test_case
 	{
 		$bbcode = '[b]Hello[/b]';
 		$xml = '<r><B>Hello</B></r>';
-		$html = '<strong>Hello</strong>';
 
 		$this->parser->xmlToReturn = $xml;
-		$this->renderer->htmlToReturn = $html;
 
 		$result = $this->converter->toHtml($bbcode);
 		$this->assertEquals($bbcode, $this->parser->lastTextParsed);
-		$this->assertEquals('<strong>Hello</strong>', $result);
+		$this->assertEquals('<p><strong>Hello</strong></p>', $result);
 	}
 
 	public function test_toBBCode_conversions()

@@ -1,9 +1,10 @@
 /* WYSIWYG Editor style for phpBB vinny/wysiwyg */
 
 .wysiwyg-editor-wrapper {
-	border: 1px solid #c5c5c5;
-	border-radius: 8px;
-	background-color: #ffffff;
+	border: 1px solid rgba(128, 128, 128, 0.3);
+	border-radius: 6px;
+	background-color: inherit;
+	color: inherit;
 	margin-bottom: 12px;
 	overflow: hidden;
 	transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -11,8 +12,8 @@
 }
 
 .wysiwyg-editor-wrapper:focus-within {
-	border-color: #3f9cdb;
-	box-shadow: 0 0 8px rgba(63, 156, 219, 0.25);
+	border-color: rgba(63, 156, 219, 0.8);
+	box-shadow: 0 0 6px rgba(63, 156, 219, 0.25);
 }
 
 /* Toolbar styling */
@@ -21,9 +22,10 @@
 	flex-wrap: wrap;
 	align-items: center;
 	padding: 6px;
-	background-color: #f7f7f7;
-	border-bottom: 1px solid #c5c5c5;
+	background-color: rgba(0, 0, 0, 0.04);
+	border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 	gap: 4px;
+	color: inherit;
 }
 
 /* Toolbar button styling */
@@ -31,7 +33,7 @@
 	background: transparent;
 	border: 1px solid transparent;
 	border-radius: 4px;
-	color: #333333;
+	color: inherit;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
@@ -46,14 +48,15 @@
 }
 
 .wysiwyg-btn:hover {
-	background-color: #e5e5e5;
-	border-color: #d0d0d0;
+	background-color: rgba(128, 128, 128, 0.15);
+	border-color: rgba(128, 128, 128, 0.25);
+	color: inherit;
 }
 
 .wysiwyg-btn.is-active {
-	background-color: #d5e6f3;
-	border-color: #a4c9e7;
-	color: #0b5894;
+	background-color: rgba(63, 156, 219, 0.2);
+	border-color: rgba(63, 156, 219, 0.5);
+	color: inherit;
 }
 
 .wysiwyg-btn svg {
@@ -66,25 +69,26 @@
 .wysiwyg-separator {
 	width: 1px;
 	height: 18px;
-	background-color: #d8d8d8;
+	background-color: currentColor;
+	opacity: 0.2;
 	margin: 0 4px;
 }
 
 /* Color and Size Dropdowns / Inputs */
 .wysiwyg-toolbar select {
 	padding: 2px 6px;
-	border: 1px solid #c5c5c5;
+	border: 1px solid rgba(128, 128, 128, 0.3);
 	border-radius: 4px;
-	background-color: #ffffff;
+	background-color: inherit;
 	font-size: 12px;
-	color: #333333;
+	color: inherit;
 	height: 28px;
 	cursor: pointer;
 }
 
 .wysiwyg-toolbar select:focus {
 	outline: none;
-	border-color: #3f9cdb;
+	border-color: rgba(63, 156, 219, 0.8);
 }
 
 /* Editor content area */
@@ -92,16 +96,18 @@
 	min-height: 250px;
 	max-height: 500px;
 	overflow-y: auto;
+	background-color: transparent;
+	color: inherit;
 }
 
 .wysiwyg-content-area .ProseMirror {
 	padding: 12px 15px;
 	min-height: 230px;
 	outline: none;
-	font-family: "Lucida Grande", Verdana, Helvetica, Arial, sans-serif;
-	font-size: 13px;
+	font-family: inherit;
+	font-size: inherit;
 	line-height: 1.5;
-	color: #333333;
+	color: inherit;
 }
 
 .wysiwyg-content-area .ProseMirror p {
@@ -129,17 +135,19 @@
 }
 
 .wysiwyg-content-area .ProseMirror :not(pre) > code {
-	background: #f4f4f4;
+	background: rgba(128, 128, 128, 0.12);
 	padding: 2px 4px;
 	border-radius: 3px;
 	font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
 	font-size: 12px;
+	color: inherit;
 }
 
 .wysiwyg-content-area .ProseMirror pre code {
 	background: transparent;
 	padding: 0;
 	border-radius: 0;
+	color: inherit;
 }
 
 .wysiwyg-content-area .ProseMirror ul,
@@ -153,8 +161,8 @@
 }
 
 .wysiwyg-content-area .ProseMirror a {
-	color: #105289;
-	text-decoration: none;
+	color: inherit;
+	text-decoration: underline;
 }
 
 .wysiwyg-content-area .ProseMirror a:hover {
@@ -173,13 +181,12 @@
 }
 
 .wysiwyg-content-area .ProseMirror span[data-bbcode]:not([data-bbcode="size"]):not([data-bbcode="color"]):not([data-bbcode="align"]):not([data-bbcode="highlight"]) {
-	background-color: #eaf4fc;
-	border: 1px dashed #3f9cdb;
+	background-color: rgba(63, 156, 219, 0.12);
+	border: 1px dashed rgba(63, 156, 219, 0.4);
 	padding: 1px 4px;
 	border-radius: 3px;
-	color: #0b5894;
+	color: inherit;
 }
-
 
 /* Hide native format buttons panel and original textarea when WYSIWYG editor is active to avoid FOUC and caret injection mismatch */
 .wysiwyg-active #format-buttons,
@@ -197,14 +204,14 @@
 /* Attachment styling inside editor */
 .ProseMirror .wysiwyg-attachment {
 	display: block;
-	background-color: #f5f5f5;
-	border: 1px solid #d3d3d3;
+	background-color: rgba(128, 128, 128, 0.08);
+	border: 1px solid rgba(128, 128, 128, 0.25);
 	border-radius: 4px;
 	padding: 8px 12px;
 	margin: 10px 0;
 	font-family: inherit;
 	font-size: 13px;
-	color: #555555;
+	color: inherit;
 	cursor: default;
 	user-select: none;
 }
@@ -214,24 +221,25 @@
 }
 
 .ProseMirror .wysiwyg-attachment:hover {
-	background-color: #ededed;
-	border-color: #c5c5c5;
+	background-color: rgba(128, 128, 128, 0.15);
+	border-color: rgba(128, 128, 128, 0.35);
 }
 
 /* Spoiler details styling */
 .ProseMirror details[data-bbcode="spoiler"] {
-	border: 1px solid #dbdbdb;
+	border: 1px solid rgba(128, 128, 128, 0.25);
 	border-radius: 4px;
-	background-color: #fafafa;
+	background-color: rgba(128, 128, 128, 0.05);
 	padding: 8px 12px;
 	margin: 10px 0;
+	color: inherit;
 }
 
 .ProseMirror details[data-bbcode="spoiler"] summary {
 	font-weight: bold;
 	cursor: pointer;
 	outline: none;
-	color: #2c3e50;
+	color: inherit;
 }
 
 /* Table styling for posts and editor */
@@ -246,14 +254,15 @@ table[data-bbcode="table"] {
 .ProseMirror td,
 table[data-bbcode="table"] td,
 table[data-bbcode="table"] th {
-	border: 1px solid #dbdbdb;
+	border: 1px solid rgba(128, 128, 128, 0.25);
 	padding: 6px 10px;
 	text-align: left;
+	color: inherit;
 }
 
 .ProseMirror tr:nth-child(even),
 table[data-bbcode="table"] tr:nth-child(even) {
-	background-color: #fafafa;
+	background-color: rgba(128, 128, 128, 0.05);
 }
 
 /* Editor footer and character count styling */
@@ -261,23 +270,25 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	display: flex;
 	justify-content: flex-end;
 	padding: 6px 12px;
-	background-color: #f7f7f7;
-	border-top: 1px solid #c5c5c5;
+	background-color: rgba(0, 0, 0, 0.03);
+	border-top: 1px solid rgba(128, 128, 128, 0.2);
+	color: inherit;
 }
 
 .wysiwyg-char-count {
 	font-size: 11px;
-	color: #666666;
+	color: inherit;
+	opacity: 0.7;
 }
 
 /* Custom select dropdown styling in toolbar */
 .wysiwyg-select {
-	background: #ffffff;
-	border: 1px solid #d3d3d3;
+	background: inherit;
+	border: 1px solid rgba(128, 128, 128, 0.3);
 	border-radius: 4px;
 	padding: 4px 8px;
 	font-size: 12px;
-	color: #333333;
+	color: inherit;
 	margin-right: 6px;
 	height: 28px;
 	outline: none;
@@ -287,7 +298,7 @@ table[data-bbcode="table"] tr:nth-child(even) {
 }
 
 .wysiwyg-select:focus {
-	border-color: #999999;
+	border-color: rgba(63, 156, 219, 0.8);
 }
 
 /* Color picker floating grid widget */
@@ -296,15 +307,37 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	display: inline-block;
 }
 
+.btn-color {
+	flex-direction: column;
+	gap: 1px;
+	padding-top: 3px;
+	padding-bottom: 3px;
+}
+
+.btn-color svg {
+	width: 15px;
+	height: 15px;
+}
+
+.wysiwyg-color-bar {
+	display: block;
+	width: 14px;
+	height: 2.5px;
+	border-radius: 1.5px;
+	background-color: currentColor;
+	transition: background-color 0.15s ease;
+}
+
 .wysiwyg-color-palette {
 	position: absolute;
 	top: 100%;
 	left: 0;
 	z-index: 1000;
 	background: #ffffff;
-	border: 1px solid #d3d3d3;
+	color: #333333;
+	border: 1px solid rgba(128, 128, 128, 0.3);
 	border-radius: 6px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 	padding: 10px;
 	width: 210px;
 	margin-top: 5px;
@@ -321,67 +354,35 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	width: 22px;
 	height: 22px;
 	border-radius: 4px;
-	border: 1px solid #e0e0e0;
+	border: 1px solid rgba(128, 128, 128, 0.3);
 	cursor: pointer;
 	transition: transform 0.1s ease, border-color 0.1s ease;
 }
 
 .wysiwyg-color-box:hover {
 	transform: scale(1.15);
-	border-color: #999999;
-	box-shadow: 0 0 4px rgba(0, 0, 0, 0.15);
+	border-color: rgba(0, 0, 0, 0.5);
+	box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
 }
 
 .wysiwyg-clear-color-btn {
 	display: block;
 	width: 100%;
-	background: #f5f5f5;
-	border: 1px solid #d3d3d3;
+	background: rgba(128, 128, 128, 0.1);
+	border: 1px solid rgba(128, 128, 128, 0.25);
 	border-radius: 4px;
 	padding: 6px;
 	font-size: 11px;
 	font-weight: bold;
-	color: #555555;
+	color: inherit;
 	cursor: pointer;
 	text-align: center;
 	transition: background 0.1s ease;
 }
 
 .wysiwyg-clear-color-btn:hover {
-	background: #e5e5e5;
-	color: #333333;
-}
-
-
-
-.ProseMirror .codebox {
-	padding: 3px;
-	background-color: #FFFFFF;
-	border: 1px solid #C9D2D8;
-	font-size: 1em;
-	font-family: Monaco, "Andale Mono", "Courier New", Courier, mono;
-	margin: 1em 0;
-}
-
-.ProseMirror .codebox p {
-	font-family: "Lucida Grande", "Trebuchet MS", Verdana, Helvetica, Arial, sans-serif;
-	font-size: 0.85em;
-	margin: 0 0 2px 0;
-	padding: 2px 5px;
-	border-bottom: 1px dashed #C9D2D8;
-}
-
-.ProseMirror .codebox pre {
-	overflow: auto;
-	font-family: Monaco, "Andale Mono", "Courier New", Courier, mono;
-	font-size: 0.9em;
-	padding: 5px;
-	margin: 0;
-}
-
-.ProseMirror .codebox code {
-	white-space: pre-wrap;
-	word-wrap: break-word;
+	background: rgba(128, 128, 128, 0.2);
+	color: inherit;
 }
 
 /* Custom Dropdown styling */
@@ -400,6 +401,7 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	height: 28px;
 	padding: 4px;
 	gap: 2px;
+	color: inherit;
 }
 
 .wysiwyg-dropdown-menu {
@@ -414,11 +416,12 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	font-size: 13px;
 	text-align: left;
 	list-style: none;
-	background-color: #fff;
+	background-color: inherit;
+	color: inherit;
 	background-clip: padding-box;
-	border: 1px solid rgba(0,0,0,.15);
+	border: 1px solid rgba(128, 128, 128, 0.3);
 	border-radius: 4px;
-	box-shadow: 0 6px 12px rgba(0,0,0,.175);
+	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
 }
 
 .wysiwyg-dropdown-item {
@@ -427,7 +430,7 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	padding: 6px 20px;
 	clear: both;
 	font-weight: 400;
-	color: #333;
+	color: inherit;
 	text-align: inherit;
 	white-space: nowrap;
 	background-color: transparent;
@@ -436,8 +439,8 @@ table[data-bbcode="table"] tr:nth-child(even) {
 }
 
 .wysiwyg-dropdown-item:hover {
-	color: #262626;
-	background-color: #f5f5f5;
+	color: inherit;
+	background-color: rgba(128, 128, 128, 0.15);
 }
 
 .wysiwyg-caret {
@@ -446,7 +449,7 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	height: 0;
 	margin-left: 2px;
 	vertical-align: middle;
-	border-top: 3px solid #555;
+	border-top: 3px solid currentColor;
 	border-right: 3px solid transparent;
 	border-left: 3px solid transparent;
 }
@@ -455,8 +458,9 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	display: inline-block;
 	vertical-align: middle;
 	overflow: hidden;
-	text-overflow: ellipsis;
+	text-overflow: inherit;
 	white-space: nowrap;
+	color: inherit;
 }
 
 /* Highlight style override */
@@ -474,11 +478,11 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	width: 16px;
 	height: 16px;
 	vertical-align: middle;
-	fill: #555;
+	fill: currentColor;
 	flex-shrink: 0;
 }
 
-/* Prevent headings from inheriting white color in prosilver */
+/* Headings inherit active theme font color */
 .postbody .content h1,
 .postbody .content h2,
 .postbody .content h3,
@@ -487,5 +491,6 @@ table[data-bbcode="table"] tr:nth-child(even) {
 .ProseMirror h2,
 .ProseMirror h3,
 .ProseMirror h4 {
-	color: #333333 !important;
+	color: inherit;
 }
+
