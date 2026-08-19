@@ -9,6 +9,7 @@
 		"selector-not-notation": null,
 		"selector-class-pattern": null,
 		"no-descending-specificity": null,
+		"media-feature-range-notation": null,
 		"font-family-no-missing-generic-family-keyword": null
 	},
 	"ignoreFiles": [
