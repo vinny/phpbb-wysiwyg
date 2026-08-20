@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild styles/all/template/js/src/tiptap-simple.js --bundle --minify --format=esm --outfile=styles/all/template/js/tiptap-simple.js",
+    "build": "esbuild styles/all/template/js/src/tiptap-simple.js --bundle --minify --format=iife --outfile=styles/all/template/js/tiptap-simple.js",
     "lint:js": "eslint styles/all/template/js/src/**/*.js",
     "lint:css": "stylelint \"styles/all/theme/**/*.css\"",
     "lint": "npm run lint:js && npm run lint:css"

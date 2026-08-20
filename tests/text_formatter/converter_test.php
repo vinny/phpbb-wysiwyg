@@ -57,8 +57,8 @@ class DummyLanguage
 	public function lang($key)
 	{
 		$map = [
-			'WROTE' => 'wrote:',
-			'CODE' => 'Code:',
+			'WROTE' => 'wrote',
+			'CODE' => 'Code',
 			'SELECT_ALL_CODE' => 'Select all',
 		];
 		return isset($map[$key]) ? $map[$key] : $key;
@@ -130,6 +130,7 @@ class converter_test extends \phpbb_test_case
 
 		// Test blocks
 		$this->assertEquals('[quote]Hello[/quote]', $this->converter->toBBCode('<blockquote>Hello</blockquote>'));
+		$this->assertEquals('[quote="Vinny" post_id=123 time=1700000000 user_id=2]Hello[/quote]', $this->converter->toBBCode('<blockquote data-author="Vinny" data-post-id="123" data-time="1700000000" data-user-id="2"><cite>Vinny wrote:</cite><div class="quote-content">Hello</div></blockquote>'));
 		$this->assertEquals('[code]echo 1;[/code]', $this->converter->toBBCode('<pre><code>echo 1;</code></pre>'));
 
 		// Test links
@@ -162,6 +163,9 @@ class converter_test extends \phpbb_test_case
 
 		// Custom BBCode with primary attribute in JSON
 		$this->assertEquals('[testtag=val1 foo="bar"]Hello[/testtag]', $this->converter->toBBCode('<span data-bbcode="testtag" data-bbcode-attrs="{&quot;testtag&quot;:&quot;val1&quot;,&quot;foo&quot;:&quot;bar&quot;}">Hello</span>'));
+
+		// Custom BBCode with inner data-bbcode-content container
+		$this->assertEquals('[c]code text[/c]', $this->converter->toBBCode('<code style="font-family: Monaco;" data-bbcode="c" data-custom-bbcode="true"><span data-bbcode-content="true">code text</span></code>'));
 	}
 
 	public function test_xmlToHtml_conversions()
@@ -181,5 +185,13 @@ class converter_test extends \phpbb_test_case
 		// Test Horizontal Rules
 		$this->parser->xmlToReturn = '<r><HR /></r>';
 		$this->assertEquals('<hr data-bbcode="hr">', $this->converter->toHtml('[hr]'));
+
+		// Test Custom BBCode fallback
+		$this->parser->xmlToReturn = '<r><C><s>[c]</s>inline code<e>[/c]</e></C></r>';
+		$this->assertEquals('<p><span data-bbcode="c" data-custom-bbcode="true">inline code</span></p>', $this->converter->toHtml('[c]inline code[/c]'));
+
+		// Test Quotes with metadata
+		$this->parser->xmlToReturn = '<r><QUOTE author="Vinny" post_id="123" time="1700000000" user_id="2"><s>[quote]</s>Quoted text<e>[/quote]</e></QUOTE></r>';
+		$this->assertEquals('<blockquote data-post-id="123" data-time="1700000000" data-user-id="2" data-author="Vinny"><div><cite>Vinny wrote:</cite>Quoted text</div></blockquote>', $this->converter->toHtml('[quote="Vinny" post_id=123 time=1700000000 user_id=2]Quoted text[/quote]'));
 	}
 }

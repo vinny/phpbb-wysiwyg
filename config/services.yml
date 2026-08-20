@@ -7,6 +7,8 @@ services:
             - '%core.root_path%'
             - '@text_formatter.parser'
             - '@language'
+            - '%tables.bbcodes%'
+            - '%tables.smilies%'
 
     vinny.wysiwyg.controller:
         class: vinny\wysiwyg\controller\wysiwyg_controller

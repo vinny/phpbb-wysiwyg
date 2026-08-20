@@ -108,12 +108,22 @@ class main_listener_test extends \phpbb_test_case
 		$this->assertArrayHasKey('core.user_setup', $events);
 		$this->assertArrayHasKey('core.text_formatter_s9e_parse_before', $events);
 		$this->assertArrayHasKey('core.posting_modify_template_vars', $events);
+		$this->assertArrayHasKey('core.viewtopic_modify_page_title', $events);
 		$this->assertArrayHasKey('core.ucp_pm_compose_template', $events);
 		$this->assertArrayHasKey('core.ucp_profile_modify_signature', $events);
 		$this->assertArrayHasKey('core.adm_page_header', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_data', $events);
 		$this->assertArrayHasKey('core.ucp_prefs_post_update_data', $events);
 		$this->assertArrayHasKey('core.user_add_modify_data', $events);
+	}
+
+	public function test_on_viewtopic_modify_page_title()
+	{
+		$event = new \phpbb\event\data([]);
+		$this->listener->on_viewtopic_modify_page_title($event);
+
+		$this->assertArrayHasKey('S_WYSIWYG_ENABLED', $this->template->vars);
+		$this->assertTrue($this->template->vars['S_WYSIWYG_ENABLED']);
 	}
 
 	public function test_on_user_setup()

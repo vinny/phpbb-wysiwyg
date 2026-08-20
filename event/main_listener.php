@@ -60,6 +60,7 @@ class main_listener implements EventSubscriberInterface
 			'core.user_setup'						=> 'on_user_setup',
 			'core.text_formatter_s9e_parse_before'	=> 'on_s9e_parse_before',
 			'core.posting_modify_template_vars'		=> 'on_posting_modify_template_vars',
+			'core.viewtopic_modify_page_title'		=> 'on_viewtopic_modify_page_title',
 			'core.ucp_pm_compose_template'			=> 'on_ucp_pm_compose_template',
 			'core.ucp_profile_modify_signature'		=> 'on_ucp_profile_modify_signature',
 			'core.adm_page_header'					=> 'on_adm_page_header',
@@ -114,6 +115,25 @@ class main_listener implements EventSubscriberInterface
 	}
 
 	/**
+	* Pass WYSIWYG template variables on topic view for Quick Reply
+	*
+	* @param \phpbb\event\data $event
+	* @return void
+	*/
+	public function on_viewtopic_modify_page_title($event)
+	{
+		if (empty($this->config['wysiwyg_enabled']))
+		{
+			return;
+		}
+
+		if ($this->is_user_wysiwyg_enabled())
+		{
+			$this->template->assign_vars($this->get_wysiwyg_template_vars());
+		}
+	}
+
+	/**
 	* Pass content converted to HTML and settings to the PM compose template
 	*
 	* @param \phpbb\event\data $event
@@ -155,7 +175,7 @@ class main_listener implements EventSubscriberInterface
 			$signature = $event['signature'];
 			$html_content = $this->converter->toHtml($signature);
 
-			$this->template->assign_vars($this->get_wysiwyg_template_vars($html_content));
+			$this->template->assign_vars($this->get_wysiwyg_template_vars($html_content, 'signature'));
 		}
 	}
 
@@ -202,7 +222,11 @@ class main_listener implements EventSubscriberInterface
 			'WYSIWYG_TABLE_INSERT', 'WYSIWYG_TABLE_ADD_ROW_BEFORE', 'WYSIWYG_TABLE_ADD_ROW_AFTER',
 			'WYSIWYG_TABLE_DELETE_ROW', 'WYSIWYG_TABLE_ADD_COL_BEFORE', 'WYSIWYG_TABLE_ADD_COL_AFTER',
 			'WYSIWYG_TABLE_DELETE_COL', 'WYSIWYG_TABLE_MERGE_CELLS', 'WYSIWYG_TABLE_SPLIT_CELL',
-			'WYSIWYG_TABLE_DELETE_TABLE'
+			'WYSIWYG_TABLE_DELETE_TABLE',
+			'WYSIWYG_TOOLBAR', 'WYSIWYG_CONTENT_AREA', 'WYSIWYG_PROMPT_URL', 'WYSIWYG_PROMPT_IMAGE',
+			'WYSIWYG_CLOSE_MENU', 'WYSIWYG_CUSTOM_BBCODES', 'WYSIWYG_PROMPT_CUSTOM_BBCODE',
+			'WYSIWYG_ATTACHMENT', 'WYSIWYG_SPOILER', 'WYSIWYG_TOO_FEW_CHARS', 'WYSIWYG_TOO_FEW_CHARS_LIMIT',
+			'WYSIWYG_TOO_MANY_CHARS', 'WYSIWYG_TOO_MANY_CHARS_LIMIT'
 		];
 
 		$translations = [];
@@ -218,14 +242,31 @@ class main_listener implements EventSubscriberInterface
 	* Get WYSIWYG editor template variables
 	*
 	* @param string $html_content
+	* @param string $mode
 	* @return array
 	*/
-	protected function get_wysiwyg_template_vars($html_content = '')
+	protected function get_wysiwyg_template_vars($html_content = '', $mode = 'post')
 	{
+		$custom_bbcodes = method_exists($this->converter, 'getCustomBBCodes') ? $this->converter->getCustomBBCodes() : [];
+
+		if ($mode === 'signature')
+		{
+			$min_chars = 0;
+			$max_chars = isset($this->config['max_sig_chars']) ? (int) $this->config['max_sig_chars'] : 0;
+		}
+		else
+		{
+			$min_chars = isset($this->config['min_post_chars']) ? (int) $this->config['min_post_chars'] : 0;
+			$max_chars = isset($this->config['max_post_chars']) ? (int) $this->config['max_post_chars'] : 0;
+		}
+
 		$vars = [
 			'S_WYSIWYG_ENABLED'             => true,
 			'S_WYSIWYG_TOGGLE'              => (bool) $this->config['wysiwyg_allow_toggle'],
+			'WYSIWYG_MIN_POST_CHARS'        => $min_chars,
+			'WYSIWYG_MAX_POST_CHARS'        => $max_chars,
 			'WYSIWYG_LANG_JSON'             => $this->get_wysiwyg_lang_json(),
+			'WYSIWYG_CUSTOM_BBCODES_JSON'   => json_encode($custom_bbcodes),
 			'WYSIWYG_HTML_TO_BBCODE_URL'    => $this->helper->route('vinny_wysiwyg_html_to_bbcode'),
 			'WYSIWYG_BBCODE_TO_HTML_URL'    => $this->helper->route('vinny_wysiwyg_bbcode_to_html'),
 		];

@@ -26,8 +26,17 @@ class converter
 	/** @var \phpbb\language\language */
 	protected $language;
 
+	/** @var string */
+	protected $bbcodes_table;
+
+	/** @var string */
+	protected $smilies_table;
+
 	/** @var array|null */
 	protected $smilies_cache = null;
+
+	/** @var array|null */
+	protected $custom_bbcodes_cache = null;
 
 	/**
 	* Constructor
@@ -37,14 +46,18 @@ class converter
 	* @param string $phpbb_root_path
 	* @param \phpbb\textformatter\parser_interface $parser
 	* @param \phpbb\language\language $language
+	* @param string $bbcodes_table
+	* @param string $smilies_table
 	*/
-	public function __construct($db, $config, $phpbb_root_path, $parser, $language)
+	public function __construct($db, $config, $phpbb_root_path, $parser, $language, $bbcodes_table = '', $smilies_table = '')
 	{
 		$this->db = $db;
 		$this->config = $config;
 		$this->phpbb_root_path = $phpbb_root_path;
 		$this->parser = $parser;
 		$this->language = $language;
+		$this->bbcodes_table = $bbcodes_table ?: (defined('BBCODES_TABLE') ? BBCODES_TABLE : '');
+		$this->smilies_table = $smilies_table ?: (defined('SMILIES_TABLE') ? SMILIES_TABLE : '');
 	}
 
 	/**
@@ -222,6 +235,9 @@ class converter
 		{
 			$html .= $tiptap_dom->saveHTML($child);
 		}
+
+		// Normalize any libxml whitespace formatting between block tags (e.g. PHP 7.2 libxml)
+		$html = preg_replace('#<div>\s*<cite>#i', '<div><cite>', $html);
 
 		return $html;
 	}
@@ -410,6 +426,18 @@ class converter
 					case 'QUOTE':
 						$author = $child->getAttribute('author');
 						$el = $html_dom->createElement('blockquote');
+						if ($child->hasAttribute('post_id'))
+						{
+							$el->setAttribute('data-post-id', $child->getAttribute('post_id'));
+						}
+						if ($child->hasAttribute('time'))
+						{
+							$el->setAttribute('data-time', $child->getAttribute('time'));
+						}
+						if ($child->hasAttribute('user_id'))
+						{
+							$el->setAttribute('data-user-id', $child->getAttribute('user_id'));
+						}
 						$div = $html_dom->createElement('div');
 						if ($author)
 						{
@@ -607,15 +635,91 @@ class converter
 						break;
 
 					default:
-						// Custom BBCode mapping
-						$el = $html_dom->createElement('span');
-						$el->setAttribute('data-bbcode', strtolower($tag_name));
+						$custom_bbcodes = $this->loadCustomBBCodes();
+						$clean_tag = strtolower($tag_name);
 
 						$attrs = [];
 						foreach ($child->attributes as $attr)
 						{
 							$attrs[$attr->name] = $attr->value;
 						}
+
+						if (isset($custom_bbcodes[$clean_tag]) && !empty($custom_bbcodes[$clean_tag]['tpl']))
+						{
+							$bb_info = $custom_bbcodes[$clean_tag];
+							$tpl = $bb_info['tpl'];
+							$val = !empty($attrs) ? reset($attrs) : '';
+
+							$temp_doc = new \DOMDocument();
+							libxml_use_internal_errors(true);
+							$parsed_ok = $temp_doc->loadHTML('<?xml encoding="utf-8" ?><div>' . $tpl . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+							libxml_clear_errors();
+
+							if ($parsed_ok && $temp_doc->documentElement && $temp_doc->documentElement->firstChild)
+							{
+								$tpl_root = $temp_doc->documentElement->firstChild;
+								$imported_tpl = null;
+								if ($tpl_root->childNodes->length === 1 && $tpl_root->firstChild->nodeType === XML_ELEMENT_NODE)
+								{
+									$imported_tpl = $html_dom->importNode($tpl_root->firstChild, true);
+								}
+								else
+								{
+									$imported_tpl = $html_dom->importNode($tpl_root, true);
+								}
+
+								if ($imported_tpl)
+								{
+									$imported_tpl->setAttribute('data-bbcode', $clean_tag);
+									$imported_tpl->setAttribute('data-custom-bbcode', 'true');
+									if ($val !== '')
+									{
+										$imported_tpl->setAttribute('data-bbcode-val', $val);
+									}
+									if (!empty($attrs))
+									{
+										$imported_tpl->setAttribute('data-bbcode-attrs', json_encode($attrs));
+									}
+
+									$imp_xpath = new \DOMXPath($html_dom);
+									$imp_text_nodes = $imp_xpath->query('.//text()[contains(., "{")]', $imported_tpl);
+									$target_text_node = null;
+									foreach ($imp_text_nodes as $itn)
+									{
+										if (preg_match('/\{(TEXT|SIMPLETEXT|INTTEXT|IDENTIFIER|COLOR|NUMBER|URL)\d*\}/i', $itn->nodeValue))
+										{
+											$target_text_node = $itn;
+											break;
+										}
+									}
+
+									if ($target_text_node && $target_text_node->parentNode)
+									{
+										$content_parent = $target_text_node->parentNode;
+										$content_wrapper = $html_dom->createElement('span');
+										$content_wrapper->setAttribute('data-bbcode-content', 'true');
+										$content_parent->replaceChild($content_wrapper, $target_text_node);
+										$this->convertNodes($child, $html_dom, $content_wrapper);
+									}
+									else
+									{
+										$content_wrapper = $html_dom->createElement('span');
+										$content_wrapper->setAttribute('data-bbcode-content', 'true');
+										$imported_tpl->appendChild($content_wrapper);
+										$this->convertNodes($child, $html_dom, $content_wrapper);
+									}
+
+									$parent->appendChild($imported_tpl);
+									break;
+								}
+							}
+						}
+
+						// Fallback mapping
+						$el = $html_dom->createElement('span');
+						$el->setAttribute('data-bbcode', $clean_tag);
+						$el->setAttribute('data-custom-bbcode', 'true');
+
 						if (!empty($attrs))
 						{
 							$first_attr_val = reset($attrs);
@@ -701,7 +805,22 @@ class converter
 					}
 					else
 					{
-						$inner_content = $this->htmlNodeToBBCode($child);
+						// Check if template had an inner content container marked with data-bbcode-content
+						$content_container = null;
+						if ($child->hasChildNodes())
+						{
+							foreach ($child->getElementsByTagName('*') as $descendant)
+							{
+								if ($descendant->getAttribute('data-bbcode-content') === 'true')
+								{
+									$content_container = $descendant;
+									break;
+								}
+							}
+						}
+
+						$inner_source = $content_container ?: $child;
+						$inner_content = $this->htmlNodeToBBCode($inner_source);
 						$bbcode .= '[' . $tag . $attr_str . ']' . $inner_content . '[/' . $tag . ']';
 					}
 					continue;
@@ -732,6 +851,20 @@ class converter
 						$author = $child->getAttribute('data-author');
 						$author_attr = $author ? '="' . $author . '"' : '';
 
+						$extra_attrs = '';
+						if ($child->hasAttribute('data-post-id'))
+						{
+							$extra_attrs .= ' post_id=' . $child->getAttribute('data-post-id');
+						}
+						if ($child->hasAttribute('data-time'))
+						{
+							$extra_attrs .= ' time=' . $child->getAttribute('data-time');
+						}
+						if ($child->hasAttribute('data-user-id'))
+						{
+							$extra_attrs .= ' user_id=' . $child->getAttribute('data-user-id');
+						}
+
 						$clone = $child->cloneNode(true);
 						$cites = $clone->getElementsByTagName('cite');
 						while ($cites->length > 0)
@@ -743,7 +876,7 @@ class converter
 						$inner_bbcode = $this->htmlNodeToBBCode($clone);
 						$inner_bbcode = trim($inner_bbcode);
 
-						$bbcode .= '[quote' . $author_attr . ']' . $inner_bbcode . '[/quote]';
+						$bbcode .= '[quote' . $author_attr . $extra_attrs . ']' . $inner_bbcode . '[/quote]';
 						break;
 
 					case 'pre':
@@ -999,24 +1132,24 @@ class converter
 		if ($this->smilies_cache === null)
 		{
 			$this->smilies_cache = [];
+			$table = $this->smilies_table ?: (defined('SMILIES_TABLE') ? SMILIES_TABLE : '');
 
-			// Define constant SMILIES_TABLE if not loaded yet (fallback)
-			$table = defined('SMILIES_TABLE') ? SMILIES_TABLE : 'phpbb_smilies';
-
-			// Defensive query checking
-			try
+			if ($table)
 			{
-				$sql = 'SELECT code, smiley_url FROM ' . $table;
-				$result = $this->db->sql_query($sql);
-				while ($row = $this->db->sql_fetchrow($result))
+				try
 				{
-					$this->smilies_cache[$row['code']] = $row['smiley_url'];
+					$sql = 'SELECT code, smiley_url FROM ' . $table;
+					$result = $this->db->sql_query($sql);
+					while ($row = $this->db->sql_fetchrow($result))
+					{
+						$this->smilies_cache[$row['code']] = $row['smiley_url'];
+					}
+					$this->db->sql_freeresult($result);
 				}
-				$this->db->sql_freeresult($result);
-			}
-			catch (\Exception $e)
-			{
-				// Silence error and use defaults if db is not connected
+				catch (\Exception $e)
+				{
+					// Silence error and use defaults if db is not connected
+				}
 			}
 		}
 
@@ -1028,5 +1161,95 @@ class converter
 		}
 
 		return '';
+	}
+
+	/**
+	* Load and cache custom bbcodes from database
+	*
+	* @return array
+	*/
+	public function loadCustomBBCodes()
+	{
+		if ($this->custom_bbcodes_cache !== null)
+		{
+			return $this->custom_bbcodes_cache;
+		}
+
+		$this->custom_bbcodes_cache = [];
+		$table = $this->bbcodes_table ?: (defined('BBCODES_TABLE') ? BBCODES_TABLE : '');
+		if (!$table)
+		{
+			return $this->custom_bbcodes_cache;
+		}
+
+		try
+		{
+			$sql = 'SELECT bbcode_id, bbcode_tag, bbcode_helpline, display_on_posting, bbcode_match, bbcode_tpl
+					FROM ' . $table . '
+					ORDER BY bbcode_tag ASC';
+			$result = $this->db->sql_query($sql);
+			if ($result)
+			{
+				while ($row = $this->db->sql_fetchrow($result))
+				{
+					$tag = $row['bbcode_tag'];
+					$clean_tag = strtolower(rtrim($tag, '='));
+					$has_val = (strpos($tag, '=') !== false ||
+						strpos($row['bbcode_match'], '=' . $clean_tag) !== false ||
+						strpos($row['bbcode_match'], '=' . strtoupper($clean_tag)) !== false ||
+						strpos($row['bbcode_match'], '={') !== false);
+
+					$this->custom_bbcodes_cache[$clean_tag] = [
+						'id'                  => (int) $row['bbcode_id'],
+						'name'                => $clean_tag,
+						'tag'                 => $clean_tag,
+						'helpline'            => !empty($row['bbcode_helpline']) ? $row['bbcode_helpline'] : '[' . $clean_tag . ']',
+						'display_on_posting'  => (int) $row['display_on_posting'],
+						'has_val'             => $has_val,
+						'match'               => $row['bbcode_match'],
+						'tpl'                 => $row['bbcode_tpl'],
+					];
+				}
+				$this->db->sql_freeresult($result);
+			}
+		}
+		catch (\Exception $e)
+		{
+			// Return empty array if table not available or error occurs
+		}
+
+		return $this->custom_bbcodes_cache;
+	}
+
+	/**
+	* Get active custom BBCodes configured in phpBB for display on posting
+	*
+	* @return array
+	*/
+	public function getCustomBBCodes()
+	{
+		$all = $this->loadCustomBBCodes();
+		$excluded = [
+			'b', 'i', 'u', 's', 'quote', 'code', 'list', 'img', 'url', 'flash', 'size', 'color', 'email',
+			'align', 'h1', 'h2', 'h3', 'h4', 'highlight', 'sub', 'sup', 'hr', 'table', 'tr', 'td', 'attachment', 'spoiler'
+		];
+
+		$posting_bbcodes = [];
+		foreach ($all as $clean_tag => $data)
+		{
+			if ($data['display_on_posting'] === 1 && !in_array($clean_tag, $excluded))
+			{
+				$posting_bbcodes[] = [
+					'id'        => $data['id'],
+					'name'      => $data['name'],
+					'tag'       => $data['tag'],
+					'helpline'  => $data['helpline'],
+					'has_val'   => $data['has_val'],
+					'tpl'       => $data['tpl'],
+					'match'     => $data['match'],
+				];
+			}
+		}
+		return $posting_bbcodes;
 	}
 }

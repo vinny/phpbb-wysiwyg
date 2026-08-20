@@ -153,7 +153,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 		foreach ($bbcodes as $tag => $data)
 		{
 			// Check if already exists
-			$sql = 'SELECT bbcode_id FROM ' . BBCODES_TABLE . " WHERE LOWER(bbcode_tag) = '" . $this->db->sql_escape(strtolower($tag)) . "'";
+			$sql = 'SELECT bbcode_id FROM ' . $this->table_prefix . 'bbcodes' . " WHERE LOWER(bbcode_tag) = '" . $this->db->sql_escape(strtolower($tag)) . "'";
 			$result = $this->db->sql_query($sql);
 			$exists = $this->db->sql_fetchfield('bbcode_id');
 			$this->db->sql_freeresult($result);
@@ -167,7 +167,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 			$regexp = $acp_bbcodes->build_regexp($data['bbcode_match'], $data['bbcode_tpl']);
 
 			// Get new ID
-			$sql = 'SELECT MAX(bbcode_id) as max_id FROM ' . BBCODES_TABLE;
+			$sql = 'SELECT MAX(bbcode_id) as max_id FROM ' . $this->table_prefix . 'bbcodes';
 			$result = $this->db->sql_query($sql);
 			$max_id = (int) $this->db->sql_fetchfield('max_id');
 			$this->db->sql_freeresult($result);
@@ -187,7 +187,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 				'second_pass_replace' => $regexp['second_pass_replace'],
 			];
 
-			$sql = 'INSERT INTO ' . BBCODES_TABLE . ' ' . $this->db->sql_build_array('INSERT', $bbcode_data);
+			$sql = 'INSERT INTO ' . $this->table_prefix . 'bbcodes' . ' ' . $this->db->sql_build_array('INSERT', $bbcode_data);
 			$this->db->sql_query($sql);
 		}
 	}
@@ -212,7 +212,7 @@ class v100_install_data extends \phpbb\db\migration\migration
 
 		foreach ($bbcodes as $tag => $match)
 		{
-			$sql = 'DELETE FROM ' . BBCODES_TABLE . " 
+			$sql = 'DELETE FROM ' . $this->table_prefix . 'bbcodes' . " 
 				WHERE LOWER(bbcode_tag) = '" . $this->db->sql_escape(strtolower($tag)) . "'
 				AND bbcode_match = '" . $this->db->sql_escape($match) . "'";
 			$this->db->sql_query($sql);
