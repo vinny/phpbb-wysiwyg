@@ -3,16 +3,13 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
-import TextStyle from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import Blockquote from '@tiptap/extension-blockquote';
 import CodeBlock from '@tiptap/extension-code-block';
 import Paragraph from '@tiptap/extension-paragraph';
 import Color from '@tiptap/extension-color';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import CharacterCount from '@tiptap/extension-character-count';
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
+import { CharacterCount } from '@tiptap/extensions';
 import TextAlign from '@tiptap/extension-text-align';
 import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
@@ -655,6 +652,8 @@ document.addEventListener('DOMContentLoaded', () => {
 					paragraph: false,
 					blockquote: false,
 					codeBlock: false,
+					link: false,
+					underline: false,
 				}),
 				CustomParagraph,
 				CustomBlockquote,
