@@ -16,6 +16,7 @@
     "stylelint-config-standard": "^40.0.0"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.8.0",
     "@tiptap/core": "^3.31.0",
     "@tiptap/extension-blockquote": "^3.31.0",
     "@tiptap/extension-code-block": "^3.31.0",

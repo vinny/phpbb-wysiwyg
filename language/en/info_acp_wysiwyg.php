@@ -60,6 +60,7 @@ $lang = array_merge($lang, [
 	'WYSIWYG_FONT_COLOR'			=> 'Font color',
 	'WYSIWYG_DEFAULT_COLOR'			=> 'Default color',
 	'WYSIWYG_LINK'					=> 'Insert link',
+	'WYSIWYG_IMAGE'					=> 'Insert image',
 	'WYSIWYG_HIGHLIGHT'				=> 'Highlight',
 	'WYSIWYG_SUPERSCRIPT'			=> 'Superscript',
 	'WYSIWYG_SUBSCRIPT'				=> 'Subscript',

@@ -14,6 +14,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
 import Highlight from '@tiptap/extension-highlight';
+import { computePosition, autoUpdate, offset, flip, shift } from '@floating-ui/dom';
 
 
 // Expose the global integration registry for other extensions
@@ -21,6 +22,8 @@ window.phpbbWysiwyg = window.phpbbWysiwyg || {
 	extensions: [],
 	buttons: [],
 	instances: new Map(),
+	activeInstance: null,
+	allInstances: [],
 	registerExtension(ext) {
 		this.extensions.push(ext);
 	},
@@ -86,6 +89,29 @@ document.addEventListener('DOMContentLoaded', () => {
 		return (translations && typeof translations[key] !== 'undefined') ? translations[key] : key;
 	}
 
+	// Safe URL sanitization protecting against XSS (javascript:, data:, vbscript:)
+	function sanitizeUrl(url) {
+		if (!url) return '';
+		const trimmed = url.trim();
+		if (/^(javascript|vbscript|data):/i.test(trimmed)) {
+			return '';
+		}
+		if (!/^(https?:\/\/|mailto:|ftp:\/\/|\/|#)/i.test(trimmed)) {
+			return `https://${trimmed}`;
+		}
+		return trimmed;
+	}
+
+	// Safe HTML entity escaping
+	function escapeHtml(str) {
+		return String(str)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
 	function scan(rootNode = document) {
 		const scope = (rootNode && rootNode.querySelectorAll) ? rootNode : document;
 		const candidates = scope.querySelectorAll(UNIVERSAL_SELECTOR);
@@ -107,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 
 		textarea.dataset.wysiwygInitialized = 'true';
-		document.body.classList.add('wysiwyg-active');
 
 		const isAcp = options.isAcp || (textarea.getAttribute('data-bbcode') === 'true' && (!textarea.name || !textarea.name.includes('message')));
 		const initialContentTextarea = document.getElementById('wysiwyg-initial-content');
@@ -150,6 +175,113 @@ document.addEventListener('DOMContentLoaded', () => {
 	document.addEventListener('phpbbWysiwygScan', e => {
 		scan(e.detail && e.detail.root ? e.detail.root : document);
 	});
+
+	function updateGlobalActiveState() {
+		let hasActiveWysiwyg = false;
+		if (window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances) {
+			for (const inst of window.phpbbWysiwyg.allInstances) {
+				if (typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
+					hasActiveWysiwyg = true;
+					break;
+				}
+			}
+		}
+		if (hasActiveWysiwyg) {
+			document.body.classList.add('wysiwyg-active');
+		} else {
+			document.body.classList.remove('wysiwyg-active');
+		}
+	}
+
+	function syncFormWysiwygUsed(targetForm) {
+		if (!targetForm) return;
+		const wysiwygUsed = targetForm.querySelector('input[name="wysiwyg_used"]');
+		if (!wysiwygUsed) return;
+
+		let anyInWysiwyg = false;
+		if (window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances) {
+			for (const inst of window.phpbbWysiwyg.allInstances) {
+				if (inst.form === targetForm && typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
+					anyInWysiwyg = true;
+					break;
+				}
+			}
+		}
+		wysiwygUsed.value = anyInWysiwyg ? '1' : '0';
+	}
+
+	// Centralized global dispatcher for phpBB's insert_text
+	let originalInsertText = window.insert_text;
+	let tempInsertText = undefined;
+
+	function handleInsertText(text, spaces, popup) {
+		let active = window.phpbbWysiwyg.activeInstance;
+
+		if ((!active || !active.editor) && window.phpbbWysiwyg.allInstances && window.phpbbWysiwyg.allInstances.length > 0) {
+			active = window.phpbbWysiwyg.allInstances[0];
+		}
+
+		if (!active || !active.editor) {
+			if (typeof originalInsertText === 'function') {
+				return originalInsertText(text, spaces, popup);
+			}
+			return;
+		}
+
+		if (typeof active.isSourceMode === 'function' && active.isSourceMode()) {
+			if (typeof originalInsertText === 'function') {
+				return originalInsertText(text, spaces, popup);
+			}
+			const ta = active.textarea;
+			if (ta) {
+				const start = ta.selectionStart || 0;
+				const end = ta.selectionEnd || 0;
+				const textToInsert = spaces ? ' ' + text + ' ' : text;
+				ta.value = ta.value.substring(0, start) + textToInsert + ta.value.substring(end);
+				ta.selectionStart = ta.selectionEnd = start + textToInsert.length;
+				ta.focus();
+			}
+			return;
+		}
+
+		const textToInsert = spaces ? ' ' + text + ' ' : text;
+		const formData = new FormData();
+		formData.append('action', 'bbcode_to_html');
+		formData.append('bbcode', textToInsert.trim());
+
+		const fetchUrl = bbcodeToHtmlUrl || (active.form ? active.form.action : '') || window.location.href;
+
+		fetch(fetchUrl, {
+			method: 'POST',
+			body: formData
+		})
+		.then(res => res.json())
+		.then(data => {
+			if (data.html !== undefined) {
+				active.editor.chain().focus().insertContent(data.html).run();
+			} else {
+				active.editor.chain().focus().insertContent(textToInsert).run();
+			}
+		})
+		.catch(() => {
+			active.editor.chain().focus().insertContent(textToInsert).run();
+		});
+	}
+
+	if (originalInsertText) {
+		window.insert_text = handleInsertText;
+	} else {
+		Object.defineProperty(window, 'insert_text', {
+			get() {
+				return tempInsertText || handleInsertText;
+			},
+			set(val) {
+				originalInsertText = val;
+				tempInsertText = handleInsertText;
+			},
+			configurable: true
+		});
+	}
 
 	function initWysiwyg(target) {
 		const textarea = target.element;
@@ -194,11 +326,15 @@ document.addEventListener('DOMContentLoaded', () => {
 				} else {
 					textarea.style.display = 'block';
 					editorContainer.remove();
+					delete textarea.dataset.wysiwygInitialized;
+					updateGlobalActiveState();
 				}
 			})
 			.catch(() => {
 				textarea.style.display = 'block';
 				editorContainer.remove();
+				delete textarea.dataset.wysiwygInitialized;
+				updateGlobalActiveState();
 			});
 		}
 	}
@@ -211,6 +347,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		toolbarEl.className = 'wysiwyg-toolbar';
 		toolbarEl.setAttribute('role', 'toolbar');
 		toolbarEl.setAttribute('aria-label', lang('WYSIWYG_TOOLBAR'));
+		toolbarEl.addEventListener('mousedown', (e) => {
+			if (e.target.closest('button, [role="button"], [role="menuitem"]')) {
+				e.preventDefault();
+			}
+		});
 
 		let customBbcodesRow = null;
 		if (typeof customBbcodes !== 'undefined' && customBbcodes.length > 0) {
@@ -218,6 +359,11 @@ document.addEventListener('DOMContentLoaded', () => {
 			customBbcodesRow.className = 'wysiwyg-toolbar-row wysiwyg-toolbar-custom-bbcodes';
 			customBbcodesRow.setAttribute('role', 'toolbar');
 			customBbcodesRow.setAttribute('aria-label', lang('WYSIWYG_CUSTOM_BBCODES'));
+			customBbcodesRow.addEventListener('mousedown', (e) => {
+				if (e.target.closest('button, [role="button"]')) {
+					e.preventDefault();
+				}
+			});
 		}
 
 		const contentEl = document.createElement('div');
@@ -237,6 +383,32 @@ document.addEventListener('DOMContentLoaded', () => {
 		wrapper.appendChild(contentEl);
 		wrapper.appendChild(footerEl);
 		container.appendChild(wrapper);
+
+		let isSourceMode = false;
+
+		const instanceRecord = {
+			editor: null,
+			textarea,
+			container,
+			wrapper,
+			contentEl,
+			form,
+			isSourceMode: () => isSourceMode,
+			toggleSourceMode: () => toggleSourceMode(),
+			validateContentLength: () => validateContentLength(instanceRecord.editor, isSourceMode)
+		};
+
+		window.phpbbWysiwyg.allInstances.push(instanceRecord);
+		if (!window.phpbbWysiwyg.activeInstance) {
+			window.phpbbWysiwyg.activeInstance = instanceRecord;
+		}
+
+		wrapper.addEventListener('click', () => {
+			window.phpbbWysiwyg.activeInstance = instanceRecord;
+		});
+		textarea.addEventListener('focus', () => {
+			window.phpbbWysiwyg.activeInstance = instanceRecord;
+		});
 
 		// Setup custom size extension
 		const CustomFontSize = Mark.create({
@@ -312,9 +484,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			},
 		});
 
-		// Setup custom BBCode schema preservation extension
-		const CustomBBCode = Mark.create({
-			name: 'customBBCode',
+		// Setup custom BBCode block extension (for block elements: div, section, blockquote, etc.)
+		const CustomBBCodeBlock = Node.create({
+			name: 'customBBCodeBlock',
+			group: 'block',
+			content: 'block+',
+			defining: true,
+			isolating: true,
 			addAttributes() {
 				return {
 					bbcode: {
@@ -322,7 +498,10 @@ document.addEventListener('DOMContentLoaded', () => {
 						parseHTML: element => element.getAttribute('data-bbcode'),
 						renderHTML: attributes => {
 							if (!attributes.bbcode) return {};
-							return { 'data-bbcode': attributes.bbcode };
+							return {
+								'data-bbcode': attributes.bbcode,
+								'data-custom-bbcode': 'true',
+							};
 						},
 					},
 					bbcodeVal: {
@@ -341,13 +520,91 @@ document.addEventListener('DOMContentLoaded', () => {
 							return { 'data-bbcode-attrs': attributes.bbcodeAttrs };
 						},
 					},
+					style: {
+						default: null,
+						parseHTML: element => element.getAttribute('style'),
+						renderHTML: attributes => {
+							if (!attributes.style) return {};
+							return { style: attributes.style };
+						},
+					},
+					class: {
+						default: null,
+						parseHTML: element => element.getAttribute('class'),
+						renderHTML: attributes => {
+							const base = 'wysiwyg-custom-bbcode-block';
+							return { class: attributes.class ? `${attributes.class} ${base}` : base };
+						},
+					},
 				};
 			},
 			parseHTML() {
 				return [
-					{
-						tag: 'span[data-bbcode]',
+					{ tag: 'div[data-bbcode]' },
+					{ tag: 'div[data-custom-bbcode]' },
+					{ tag: 'section[data-bbcode]' },
+					{ tag: 'blockquote[data-custom-bbcode]' },
+				];
+			},
+			renderHTML({ HTMLAttributes }) {
+				return ['div', HTMLAttributes, 0];
+			},
+		});
+
+		// Setup custom BBCode inline extension
+		const CustomBBCode = Mark.create({
+			name: 'customBBCode',
+			addAttributes() {
+				return {
+					bbcode: {
+						default: null,
+						parseHTML: element => element.getAttribute('data-bbcode'),
+						renderHTML: attributes => {
+							if (!attributes.bbcode) return {};
+							return {
+								'data-bbcode': attributes.bbcode,
+								'data-custom-bbcode': 'true',
+							};
+						},
 					},
+					bbcodeVal: {
+						default: null,
+						parseHTML: element => element.getAttribute('data-bbcode-val'),
+						renderHTML: attributes => {
+							if (!attributes.bbcodeVal) return {};
+							return { 'data-bbcode-val': attributes.bbcodeVal };
+						},
+					},
+					bbcodeAttrs: {
+						default: null,
+						parseHTML: element => element.getAttribute('data-bbcode-attrs'),
+						renderHTML: attributes => {
+							if (!attributes.bbcodeAttrs) return {};
+							return { 'data-bbcode-attrs': attributes.bbcodeAttrs };
+						},
+					},
+					style: {
+						default: null,
+						parseHTML: element => element.getAttribute('style'),
+						renderHTML: attributes => {
+							if (!attributes.style) return {};
+							return { style: attributes.style };
+						},
+					},
+				};
+			},
+			parseHTML() {
+				return [
+					{ tag: 'span[data-bbcode]' },
+					{ tag: 'span[data-custom-bbcode]' },
+					{ tag: 'code[data-bbcode]' },
+					{ tag: 'code[data-custom-bbcode]' },
+					{ tag: 'b[data-bbcode]' },
+					{ tag: 'b[data-custom-bbcode]' },
+					{ tag: 'mark[data-bbcode]' },
+					{ tag: 'mark[data-custom-bbcode]' },
+					{ tag: 'font[data-bbcode]' },
+					{ tag: 'a[data-bbcode]' },
 				];
 			},
 			renderHTML({ HTMLAttributes }) {
@@ -616,8 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
 							this.editor.chain().focus().extendMarkRange('link').unsetLink().run();
 							return true;
 						}
-						const cleanUrl = !/^(https?:\/\/|mailto:|ftp:\/\/|\/|#)/i.test(url) ? `https://${url}` : url;
-						this.editor.chain().focus().extendMarkRange('link').setLink({ href: cleanUrl }).run();
+						const cleanUrl = sanitizeUrl(url);
+						if (cleanUrl) {
+							this.editor.chain().focus().extendMarkRange('link').setLink({ href: cleanUrl }).run();
+						}
 						return true;
 					},
 					'Mod-Shift-7': () => this.editor.chain().focus().toggleOrderedList().run(),
@@ -659,13 +918,22 @@ document.addEventListener('DOMContentLoaded', () => {
 				CustomBlockquote,
 				CustomCodeBlock,
 				Underline,
-				Link.configure({ openOnClick: false, autolink: true }),
+				Link.configure({
+					openOnClick: false,
+					autolink: true,
+					defaultProtocol: 'https',
+					protocols: ['ftp', 'mailto'],
+					HTMLAttributes: {
+						rel: 'noopener noreferrer nofollow',
+					},
+				}),
 				Image,
 				TextStyle,
 				Color,
 				CustomFontSize,
 				CustomSmiley,
 				CustomBBCode,
+				CustomBBCodeBlock,
 				AttachmentNode,
 				SpoilerNode,
 				KeyboardShortcutsExtension,
@@ -711,12 +979,24 @@ document.addEventListener('DOMContentLoaded', () => {
 					'aria-multiline': 'true',
 					'aria-label': lang('WYSIWYG_CONTENT_AREA'),
 				},
+				transformPastedHTML: (html) => {
+					if (!html) {
+						return html;
+					}
+					let cleaned = html;
+					cleaned = cleaned.replace(/<span[^>]*class=["'][^"']*google-src-text[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, '');
+					while (/<font[^>]*style=["'][^"']*vertical-align:\s*inherit[^"']*["'][^>]*>/i.test(cleaned)) {
+						cleaned = cleaned.replace(/<font[^>]*style=["'][^"']*vertical-align:\s*inherit[^"']*["'][^>]*>([\s\S]*?)<\/font>/gi, '$1');
+					}
+					cleaned = cleaned.replace(/<\/?font[^>]*>/gi, '');
+					return cleaned;
+				},
 				handleKeyDown: (view, event) => {
 					// Ctrl+Enter or Cmd+Enter: Submit posting form
 					if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
 						event.preventDefault();
 						if (form) {
-							if (wysiwygUsed.value === '1') {
+							if (!isSourceMode) {
 								textarea.value = editor.getHTML();
 							}
 							const submitBtn = form.querySelector('input[type="submit"][name="post"]') ||
@@ -725,6 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
 								form.querySelector('button[type="submit"]');
 							if (submitBtn) {
 								submitBtn.click();
+							} else if (typeof form.requestSubmit === 'function') {
+								form.requestSubmit();
 							} else {
 								form.submit();
 							}
@@ -748,18 +1030,26 @@ document.addEventListener('DOMContentLoaded', () => {
 					return false;
 				},
 			},
+			onFocus: () => {
+				window.phpbbWysiwyg.activeInstance = instanceRecord;
+			},
 			onUpdate: ({ editor: currentEditor }) => {
-				if (wysiwygUsed.value === '1') {
+				if (!isSourceMode) {
 					textarea.value = currentEditor.getHTML();
 				}
 				// Update character count
 				const count = currentEditor.storage.characterCount.characters();
 				charCountEl.textContent = lang('WYSIWYG_CHARACTERS').replace('%d', count);
 			},
+			onTransaction: () => {
+				updateToolbarActiveStates();
+			},
 			onSelectionUpdate: () => {
 				updateToolbarActiveStates();
 			},
 		});
+
+		instanceRecord.editor = editor;
 
 		// Initial sync
 		textarea.value = editor.getHTML();
@@ -784,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			const text = currentEditor.getText().trim();
 			let hasNonTextNodes = false;
 			currentEditor.state.doc.descendants(node => {
-				if (['image', 'attachment', 'table', 'customSmiley'].includes(node.type.name)) {
+				if (['image', 'attachment', 'table', 'smiley', 'customSmiley'].includes(node.type.name)) {
 					hasNonTextNodes = true;
 					return false;
 				}
@@ -830,35 +1120,46 @@ document.addEventListener('DOMContentLoaded', () => {
 			window.alert(errorMsg);
 		}
 
-		if (form && form.addEventListener) {
+		if (form && !form.dataset.wysiwygSubmitHooked) {
+			form.dataset.wysiwygSubmitHooked = 'true';
 			form.addEventListener('submit', e => {
-				if (wysiwygUsed.value === '1') {
-					if (!isSourceMode) {
-						textarea.value = editor.getHTML();
+				const formInstances = (window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances)
+					? window.phpbbWysiwyg.allInstances.filter(inst => inst.form === form)
+					: [];
+
+				let anyWysiwyg = false;
+				for (const inst of formInstances) {
+					if (typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
+						anyWysiwyg = true;
+						if (inst.editor && inst.textarea) {
+							inst.textarea.value = inst.editor.getHTML();
+						}
 					}
-					const submitter = e.submitter;
-					const isPreviewOrDraft = submitter && (submitter.name === 'preview' || submitter.name === 'save');
-					if (!isPreviewOrDraft && !validateContentLength(editor, isSourceMode)) {
-						e.preventDefault();
-						e.stopPropagation();
-						return false;
+				}
+
+				const formWysiwygUsed = form.querySelector('input[name="wysiwyg_used"]');
+				if (formWysiwygUsed) {
+					formWysiwygUsed.value = anyWysiwyg ? '1' : '0';
+				}
+
+				const submitter = e.submitter;
+				const isPreviewOrDraft = submitter && (submitter.name === 'preview' || submitter.name === 'save');
+				if (!isPreviewOrDraft) {
+					for (const inst of formInstances) {
+						if (typeof inst.validateContentLength === 'function' && !inst.validateContentLength()) {
+							e.preventDefault();
+							e.stopPropagation();
+							return false;
+						}
 					}
 				}
 			});
 		}
 
-		// Helper to close all dropdown menus
+		// Unified registry for Tiptap standard dropdown menus
+		const activeDropdowns = [];
 		function closeAllMenus() {
-			headingMenu.style.display = 'none';
-			headingBtn.setAttribute('aria-expanded', 'false');
-			listMenu.style.display = 'none';
-			listBtn.setAttribute('aria-expanded', 'false');
-			sizeMenu.style.display = 'none';
-			sizeBtn.setAttribute('aria-expanded', 'false');
-			colorPalette.style.display = 'none';
-			colorBtn.setAttribute('aria-expanded', 'false');
-			tableMenu.style.display = 'none';
-			tableBtn.setAttribute('aria-expanded', 'false');
+			activeDropdowns.forEach(d => d.close());
 		}
 
 		// Close menus on outside click or Escape key
@@ -871,13 +1172,85 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		});
 
-		// 1. Heading Dropdown Menu
-		const headingContainer = document.createElement('div');
-		headingContainer.className = 'wysiwyg-dropdown select-heading';
+		// Standard Tiptap UI Dropdown & Popover primitive using Floating UI
+		function createTiptapDropdown({ trigger, content, placement = 'bottom-start' }) {
+			const container = document.createElement('div');
+			container.className = 'tiptap-dropdown-container';
+			container.appendChild(trigger);
 
+			content.classList.add('tiptap-dropdown-menu');
+			content.setAttribute('role', 'menu');
+			content.setAttribute('data-state', 'closed');
+			content.style.display = 'none';
+			container.appendChild(content);
+
+			let cleanupAutoUpdate = null;
+
+			function updatePosition() {
+				computePosition(trigger, content, {
+					placement,
+					middleware: [offset(4), flip(), shift({ padding: 6 })],
+				}).then(({ x, y }) => {
+					Object.assign(content.style, {
+						left: `${x}px`,
+						top: `${y}px`,
+					});
+				});
+			}
+
+			function open() {
+				closeAllMenus();
+				content.style.display = 'block';
+				content.setAttribute('data-state', 'open');
+				trigger.setAttribute('aria-expanded', 'true');
+				cleanupAutoUpdate = autoUpdate(trigger, content, updatePosition);
+			}
+
+			function close() {
+				content.style.display = 'none';
+				content.setAttribute('data-state', 'closed');
+				trigger.setAttribute('aria-expanded', 'false');
+				if (cleanupAutoUpdate) {
+					cleanupAutoUpdate();
+					cleanupAutoUpdate = null;
+				}
+			}
+
+			function toggle() {
+				if (content.getAttribute('data-state') === 'open') {
+					close();
+				} else {
+					open();
+				}
+			}
+
+			trigger.addEventListener('click', (e) => {
+				e.stopPropagation();
+				toggle();
+			});
+
+			content.addEventListener('click', (e) => {
+				e.stopPropagation();
+			});
+
+			const dropdown = {
+				container,
+				trigger,
+				content,
+				open,
+				close,
+				toggle,
+				isOpen: () => content.getAttribute('data-state') === 'open',
+			};
+
+			activeDropdowns.push(dropdown);
+			return dropdown;
+		}
+
+		// 1. Heading Dropdown
 		const headingBtn = document.createElement('button');
 		headingBtn.type = 'button';
-		headingBtn.className = 'wysiwyg-btn btn-heading-toggle';
+		headingBtn.className = 'wysiwyg-btn';
 		headingBtn.title = lang('WYSIWYG_HEADING');
 		headingBtn.setAttribute('aria-label', lang('WYSIWYG_HEADING'));
 		headingBtn.setAttribute('aria-haspopup', 'true');
@@ -885,7 +1258,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		headingBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 19h-2v-6h-6v6H9V5h2v6h6V5h2v14z"/></svg><span class="wysiwyg-caret"></span>';
 
 		const headingMenu = document.createElement('div');
-		headingMenu.className = 'wysiwyg-dropdown-menu';
 
 		const headings = [
 			{ level: 0, label: lang('WYSIWYG_HEADING_P') },
@@ -895,12 +1267,18 @@ document.addEventListener('DOMContentLoaded', () => {
 			{ level: 4, label: lang('WYSIWYG_HEADING_4') },
 		];
 
+		const headingDropdown = createTiptapDropdown({
+			trigger: headingBtn,
+			content: headingMenu,
+			placement: 'bottom-start',
+		});
+
 		headings.forEach(h => {
 			const item = document.createElement('button');
 			item.type = 'button';
-			item.className = 'wysiwyg-dropdown-item';
+			item.className = 'tiptap-dropdown-item';
 			item.textContent = h.label;
-			item.setAttribute('role', 'button');
+			item.setAttribute('role', 'menuitem');
 			item.addEventListener('click', (e) => {
 				e.stopPropagation();
 				if (h.level === 0) {
@@ -908,29 +1286,15 @@ document.addEventListener('DOMContentLoaded', () => {
 				} else {
 					editor.chain().focus().toggleHeading({ level: h.level }).run();
 				}
-				closeAllMenus();
+				headingDropdown.close();
 			});
 			headingMenu.appendChild(item);
 		});
-		headingBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isVisible = headingMenu.style.display === 'block';
-			closeAllMenus();
-			if (!isVisible) {
-				headingMenu.style.display = 'block';
-				headingBtn.setAttribute('aria-expanded', 'true');
-			}
-		});
-		headingContainer.appendChild(headingBtn);
-		headingContainer.appendChild(headingMenu);
 
-		// 2. List Dropdown Menu
-		const listContainer = document.createElement('div');
-		listContainer.className = 'wysiwyg-dropdown select-lists';
-
+		// 2. List Dropdown (Fixes Attachment 1 leak)
 		const listBtn = document.createElement('button');
 		listBtn.type = 'button';
-		listBtn.className = 'wysiwyg-btn btn-list-toggle';
+		listBtn.className = 'wysiwyg-btn';
 		listBtn.title = lang('WYSIWYG_LISTS');
 		listBtn.setAttribute('aria-label', lang('WYSIWYG_LISTS'));
 		listBtn.setAttribute('aria-haspopup', 'true');
@@ -938,7 +1302,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		listBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0 12c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zM7 19h14v-2H7v2zm0-6h14v-2H7v2zm0-8v2h14V5H7z"/></svg><span class="wysiwyg-caret"></span>';
 
 		const listMenu = document.createElement('div');
-		listMenu.className = 'wysiwyg-dropdown-menu';
+
+		const listDropdown = createTiptapDropdown({
+			trigger: listBtn,
+			content: listMenu,
+			placement: 'bottom-start',
+		});
 
 		const lists = [
 			{ name: lang('WYSIWYG_LIST_NONE'), value: 'none' },
@@ -948,9 +1317,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		lists.forEach(l => {
 			const item = document.createElement('button');
 			item.type = 'button';
-			item.className = 'wysiwyg-dropdown-item';
+			item.className = 'tiptap-dropdown-item';
 			item.textContent = l.name;
-			item.setAttribute('role', 'button');
+			item.setAttribute('role', 'menuitem');
 			item.addEventListener('click', (e) => {
 				e.stopPropagation();
 				if (l.value === 'bullet') {
@@ -964,29 +1333,15 @@ document.addEventListener('DOMContentLoaded', () => {
 						editor.chain().focus().toggleOrderedList().run();
 					}
 				}
-				closeAllMenus();
+				listDropdown.close();
 			});
 			listMenu.appendChild(item);
 		});
-		listBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isVisible = listMenu.style.display === 'block';
-			closeAllMenus();
-			if (!isVisible) {
-				listMenu.style.display = 'block';
-				listBtn.setAttribute('aria-expanded', 'true');
-			}
-		});
-		listContainer.appendChild(listBtn);
-		listContainer.appendChild(listMenu);
 
-		// 3. Size Dropdown Menu
-		const sizeContainer = document.createElement('div');
-		sizeContainer.className = 'wysiwyg-dropdown select-size';
-
+		// 3. Size Dropdown
 		const sizeBtn = document.createElement('button');
 		sizeBtn.type = 'button';
-		sizeBtn.className = 'wysiwyg-btn btn-size-toggle';
+		sizeBtn.className = 'wysiwyg-btn';
 		sizeBtn.title = lang('WYSIWYG_SIZE');
 		sizeBtn.setAttribute('aria-label', lang('WYSIWYG_SIZE'));
 		sizeBtn.setAttribute('aria-haspopup', 'true');
@@ -994,7 +1349,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		sizeBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 4v3h5v12h3V7h5V4H9zm-6 8h3v7h3v-7h3V9H3v3z"/></svg><span class="wysiwyg-caret"></span>';
 
 		const sizeMenu = document.createElement('div');
-		sizeMenu.className = 'wysiwyg-dropdown-menu';
+
+		const sizeDropdown = createTiptapDropdown({
+			trigger: sizeBtn,
+			content: sizeMenu,
+			placement: 'bottom-start',
+		});
 
 		const sizes = [
 			{ name: lang('WYSIWYG_SIZE_NORMAL'), value: '' },
@@ -1006,9 +1366,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		sizes.forEach(s => {
 			const item = document.createElement('button');
 			item.type = 'button';
-			item.className = 'wysiwyg-dropdown-item';
+			item.className = 'tiptap-dropdown-item';
 			item.textContent = s.name;
-			item.setAttribute('role', 'button');
+			item.setAttribute('role', 'menuitem');
 			item.addEventListener('click', (e) => {
 				e.stopPropagation();
 				if (s.value) {
@@ -1016,29 +1376,15 @@ document.addEventListener('DOMContentLoaded', () => {
 				} else {
 					editor.chain().focus().unsetFontSize().run();
 				}
-				closeAllMenus();
+				sizeDropdown.close();
 			});
 			sizeMenu.appendChild(item);
 		});
-		sizeBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isVisible = sizeMenu.style.display === 'block';
-			closeAllMenus();
-			if (!isVisible) {
-				sizeMenu.style.display = 'block';
-				sizeBtn.setAttribute('aria-expanded', 'true');
-			}
-		});
-		sizeContainer.appendChild(sizeBtn);
-		sizeContainer.appendChild(sizeMenu);
 
-		// 3.5 Table Dropdown Menu
-		const tableContainer = document.createElement('div');
-		tableContainer.className = 'wysiwyg-dropdown select-table';
-
+		// 4. Table Dropdown
 		const tableBtn = document.createElement('button');
 		tableBtn.type = 'button';
-		tableBtn.className = 'wysiwyg-btn btn-table-toggle';
+		tableBtn.className = 'wysiwyg-btn';
 		tableBtn.title = lang('WYSIWYG_TABLE');
 		tableBtn.setAttribute('aria-label', lang('WYSIWYG_TABLE'));
 		tableBtn.setAttribute('aria-haspopup', 'true');
@@ -1046,7 +1392,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		tableBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H4v-4h4v4zm0-6H4v-4h4v4zm0-6H4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4z"/></svg><span class="wysiwyg-caret"></span>';
 
 		const tableMenu = document.createElement('div');
-		tableMenu.className = 'wysiwyg-dropdown-menu';
 		tableMenu.style.minWidth = '185px';
 
 		const tableOptions = [
@@ -1062,31 +1407,29 @@ document.addEventListener('DOMContentLoaded', () => {
 			{ name: lang('WYSIWYG_TABLE_DELETE_TABLE'), action: () => editor.chain().focus().deleteTable().run() },
 		];
 
+		const tableDropdown = createTiptapDropdown({
+			trigger: tableBtn,
+			content: tableMenu,
+			placement: 'bottom-start',
+		});
+
 		tableOptions.forEach(opt => {
 			const item = document.createElement('button');
 			item.type = 'button';
-			item.className = 'wysiwyg-dropdown-item';
+			item.className = 'tiptap-dropdown-item';
 			item.textContent = opt.name;
-			item.setAttribute('role', 'button');
+			item.setAttribute('role', 'menuitem');
 			item.addEventListener('click', (e) => {
 				e.stopPropagation();
 				if (opt.alwaysEnabled || editor.isActive('table')) {
 					opt.action();
 				}
-				closeAllMenus();
+				tableDropdown.close();
 			});
 			tableMenu.appendChild(item);
 		});
 
-		tableBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isVisible = tableMenu.style.display === 'block';
-			closeAllMenus();
-			if (!isVisible) {
-				tableMenu.style.display = 'block';
-				tableBtn.setAttribute('aria-expanded', 'true');
-			}
-
+		tableBtn.addEventListener('click', () => {
 			const inTable = editor.isActive('table');
 			Array.from(tableMenu.children).forEach((child, index) => {
 				const opt = tableOptions[index];
@@ -1104,85 +1447,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			});
 		});
 
-		tableContainer.appendChild(tableBtn);
-		tableContainer.appendChild(tableMenu);
-
-		// 5. Populate Custom BBCodes 2nd Row
-		if (customBbcodesRow && typeof customBbcodes !== 'undefined' && customBbcodes.length > 0) {
-			customBbcodes.forEach(bb => {
-				const button = document.createElement('button');
-				button.type = 'button';
-				button.className = `wysiwyg-btn btn-custom-bbcode btn-bbcode-${bb.tag}`;
-				button.textContent = `[${bb.tag}]`;
-				const tooltip = bb.helpline || `[${bb.tag}]`;
-				button.title = tooltip;
-				button.setAttribute('aria-label', tooltip);
-				button.setAttribute('role', 'button');
-
-				button.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					closeAllMenus();
-
-					let val = '';
-					if (bb.has_val) {
-						const promptTemplate = lang('WYSIWYG_PROMPT_CUSTOM_BBCODE');
-						const promptMsg = promptTemplate.replace('%s', bb.tag);
-						const inputVal = window.prompt(promptMsg, '');
-						if (inputVal === null) return;
-						val = inputVal.trim();
-					}
-
-					// Get selected text if any
-					const { state } = editor;
-					const { from, to, empty } = state.selection;
-					let selectedText = '';
-					if (!empty) {
-						selectedText = state.doc.textBetween(from, to, ' ');
-					}
-
-					let renderedHtml;
-					if (bb.tpl) {
-						let tplHtml = bb.tpl;
-						const textReplacement = selectedText || '...';
-						const wrappedReplacement = `<span data-bbcode-content="true">${textReplacement}</span>`;
-						tplHtml = tplHtml.replace(/\{(TEXT|SIMPLETEXT|INTTEXT|IDENTIFIER|COLOR|NUMBER|URL)\d*\}/gi, (match) => {
-							if (val && !match.match(/TEXT/i)) {
-								return val;
-							}
-							return wrappedReplacement;
-						});
-
-						const parser = new window.DOMParser();
-						const parsedDoc = parser.parseFromString(`<div>${tplHtml}</div>`, 'text/html');
-						const rootEl = parsedDoc.body.firstElementChild;
-						if (rootEl) {
-							const targetEl = (rootEl.children.length === 1) ? rootEl.firstElementChild : rootEl;
-							targetEl.setAttribute('data-bbcode', bb.tag);
-							targetEl.setAttribute('data-custom-bbcode', 'true');
-							if (val) {
-								targetEl.setAttribute('data-bbcode-val', val);
-							}
-							renderedHtml = rootEl.innerHTML;
-						} else {
-							renderedHtml = tplHtml;
-						}
-					} else {
-						const textReplacement = selectedText || '...';
-						renderedHtml = `<span data-bbcode="${bb.tag}" data-custom-bbcode="true"${val ? ` data-bbcode-val="${val}"` : ''}><span data-bbcode-content="true">${textReplacement}</span></span>`;
-					}
-
-					editor.chain().focus().insertContent(renderedHtml).run();
-				});
-
-				customBbcodesRow.appendChild(button);
-			});
-		}
-
-		// 6. Color Picker Dropdown Menu
-		const colorPickerContainer = document.createElement('div');
-		colorPickerContainer.className = 'wysiwyg-color-picker-container wysiwyg-dropdown';
-
+		// 5. Color Popover
 		const colorBtn = document.createElement('button');
 		colorBtn.type = 'button';
 		colorBtn.className = 'wysiwyg-btn btn-color';
@@ -1194,53 +1459,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		const colorBar = colorBtn.querySelector('.wysiwyg-color-bar');
 
-		const colorPalette = document.createElement('div');
-		colorPalette.className = 'wysiwyg-color-palette wysiwyg-dropdown-menu';
+		const colorContent = document.createElement('div');
+		colorContent.className = 'tiptap-color-popover';
 
 		const paletteGrid = document.createElement('div');
-		paletteGrid.className = 'wysiwyg-color-grid';
+		paletteGrid.className = 'tiptap-color-grid';
 
 		const paletteColors = [
 			'#000000', '#444444', '#666666', '#999999', '#CCCCCC', '#EEEEEE', '#FFFFFF',
 			'#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#9900FF', '#FF00FF',
 			'#EA9999', '#F9CB9C', '#FFE599', '#B6D7A8', '#A2C4C9', '#9FC5E8', '#B4A7D6', '#D5A6BD',
 			'#CC0000', '#E69138', '#F1C232', '#6AA84F', '#45818E', '#3D85C6', '#674EA7', '#A64D79',
-			'#660000', '#783F04', '#7F6000', '#274E13', '#0C343D', '#073763', '#20124D', '#4C1130'
+			'#660000', '#783F04', '#7F6000', '#274E13', '#0C343D', '#073763', '#20124D', '#4C1130',
 		];
 
-		paletteColors.forEach(color => {
-			const colorBox = document.createElement('button');
-			colorBox.type = 'button';
-			colorBox.className = 'wysiwyg-color-box';
-			colorBox.style.backgroundColor = color;
-			colorBox.title = color;
-			colorBox.setAttribute('aria-label', color);
-			colorBox.setAttribute('role', 'button');
-			colorBox.addEventListener('click', (e) => {
-				e.stopPropagation();
-				editor.chain().focus().setColor(color).run();
-				closeAllMenus();
-				updateColorBtnIndicator(color);
-			});
-			paletteGrid.appendChild(colorBox);
+		const colorDropdown = createTiptapDropdown({
+			trigger: colorBtn,
+			content: colorContent,
+			placement: 'bottom-start',
 		});
-
-		const clearColorBtn = document.createElement('button');
-		clearColorBtn.type = 'button';
-		clearColorBtn.className = 'wysiwyg-clear-color-btn';
-		clearColorBtn.textContent = lang('WYSIWYG_DEFAULT_COLOR');
-		clearColorBtn.setAttribute('role', 'button');
-		clearColorBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			editor.chain().focus().unsetColor().run();
-			closeAllMenus();
-			updateColorBtnIndicator('');
-		});
-
-		colorPalette.appendChild(paletteGrid);
-		colorPalette.appendChild(clearColorBtn);
-		colorPickerContainer.appendChild(colorBtn);
-		colorPickerContainer.appendChild(colorPalette);
 
 		function updateColorBtnIndicator(color) {
 			if (color) {
@@ -1250,28 +1487,143 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 
-		colorBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isVisible = colorPalette.style.display === 'block';
-			closeAllMenus();
-			if (!isVisible) {
-				colorPalette.style.display = 'block';
-				colorBtn.setAttribute('aria-expanded', 'true');
-			}
+		paletteColors.forEach(color => {
+			const colorBox = document.createElement('button');
+			colorBox.type = 'button';
+			colorBox.className = 'tiptap-color-box';
+			colorBox.style.backgroundColor = color;
+			colorBox.title = color;
+			colorBox.setAttribute('aria-label', color);
+			colorBox.setAttribute('role', 'button');
+			colorBox.addEventListener('click', (e) => {
+				e.stopPropagation();
+				editor.chain().focus().setColor(color).run();
+				colorDropdown.close();
+				updateColorBtnIndicator(color);
+			});
+			paletteGrid.appendChild(colorBox);
 		});
 
-		colorPalette.addEventListener('click', (e) => {
+		const clearColorBtn = document.createElement('button');
+		clearColorBtn.type = 'button';
+		clearColorBtn.className = 'tiptap-clear-color-btn';
+		clearColorBtn.textContent = lang('WYSIWYG_DEFAULT_COLOR');
+		clearColorBtn.setAttribute('role', 'button');
+		clearColorBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
+			editor.chain().focus().unsetColor().run();
+			colorDropdown.close();
+			updateColorBtnIndicator('');
 		});
+
+		colorContent.appendChild(paletteGrid);
+		colorContent.appendChild(clearColorBtn);
+
+		// Populate custom BBCodes row
+		if (customBbcodesRow && typeof customBbcodes !== 'undefined' && customBbcodes.length > 0) {
+			customBbcodes.forEach(item => {
+				const btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = `wysiwyg-btn btn-custom-bbcode btn-bbcode-${item.tag}`;
+				btn.textContent = `[${item.tag}]`;
+				const help = item.helpline || `[${item.tag}]`;
+				btn.title = help;
+				btn.setAttribute('aria-label', help);
+				btn.setAttribute('role', 'button');
+				btn.addEventListener('mousedown', (e) => {
+					e.preventDefault();
+				});
+
+				btn.addEventListener('click', (e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					closeAllMenus();
+
+					let val = '';
+					if (item.has_val) {
+						const promptMsg = lang('WYSIWYG_PROMPT_CUSTOM_BBCODE').replace('%s', item.tag);
+						const input = window.prompt(promptMsg, '');
+						if (input === null) return;
+						val = input.trim();
+					}
+
+					const { state } = editor;
+					const { from, to, empty } = state.selection;
+					let selectedText = '';
+					if (!empty) {
+						selectedText = state.doc.textBetween(from, to, ' ');
+					}
+
+					let nodeHtml;
+					if (item.tpl) {
+						let rendered = item.tpl;
+						const contentPlaceholder = `<span data-bbcode-content="true">${selectedText ? escapeHtml(selectedText) : '...'}</span>`;
+						rendered = rendered.replace(/\{(TEXT|SIMPLETEXT|INTTEXT|IDENTIFIER|COLOR|NUMBER|URL)\d*\}/gi, (match) => {
+							if (val && !match.match(/TEXT/i)) {
+								return escapeHtml(val);
+							}
+							return contentPlaceholder;
+						});
+
+						const doc = new window.DOMParser().parseFromString(`<div>${rendered}</div>`, 'text/html');
+						const rootEl = doc.body.firstElementChild;
+						if (rootEl) {
+							const isBlock = /<(div|p|blockquote|table|section|article|aside|pre|h[1-6]|hr)\b/i.test(rendered);
+							if (rootEl.children.length === 1) {
+								const singleChild = rootEl.firstElementChild;
+								singleChild.setAttribute('data-bbcode', item.tag);
+								singleChild.setAttribute('data-custom-bbcode', 'true');
+								if (val) {
+									singleChild.setAttribute('data-bbcode-val', val);
+								}
+								if (isBlock) {
+									let hasInline = false;
+									for (let i = 0; i < singleChild.childNodes.length; i++) {
+										const n = singleChild.childNodes[i];
+										if ((n.nodeType === 3 && n.nodeValue.trim() !== '') || (n.nodeType === 1 && !/^(P|DIV|H[1-6]|BLOCKQUOTE|UL|OL|TABLE|PRE|DETAILS)$/i.test(n.tagName))) {
+											hasInline = true;
+											break;
+										}
+									}
+									if (hasInline && singleChild.children.length === 1 && singleChild.firstElementChild.getAttribute('data-bbcode-content') === 'true') {
+										const contentSpan = singleChild.firstElementChild;
+										const p = doc.createElement('p');
+										singleChild.replaceChild(p, contentSpan);
+										p.appendChild(contentSpan);
+									}
+								}
+								nodeHtml = singleChild.outerHTML;
+							} else {
+								rootEl.setAttribute('data-bbcode', item.tag);
+								rootEl.setAttribute('data-custom-bbcode', 'true');
+								if (val) {
+									rootEl.setAttribute('data-bbcode-val', val);
+								}
+								nodeHtml = rootEl.outerHTML;
+							}
+						} else {
+							nodeHtml = rendered;
+						}
+					} else {
+						const content = selectedText ? escapeHtml(selectedText) : '...';
+						nodeHtml = `<span data-bbcode="${escapeHtml(item.tag)}" data-custom-bbcode="true"${val ? ` data-bbcode-val="${escapeHtml(val)}"` : ''}><span data-bbcode-content="true">${content}</span></span>`;
+					}
+
+					editor.chain().focus().insertContent(nodeHtml).run();
+				});
+
+				customBbcodesRow.appendChild(btn);
+			});
+		}
 
 		// Create toolbar buttons matching exact mockup order
 		const buttons = [
 			{ name: 'undo', type: 'button', label: lang('WYSIWYG_UNDO'), action: () => editor.chain().focus().undo().run(), active: () => false, icon: '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>' },
 			{ name: 'redo', type: 'button', label: lang('WYSIWYG_REDO'), action: () => editor.chain().focus().redo().run(), active: () => false, icon: '<svg viewBox="0 0 24 24"><path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>' },
 			{ type: 'separator' },
-			{ name: 'heading', type: 'custom', element: headingContainer },
-			{ name: 'lists', type: 'custom', element: listContainer },
-			{ name: 'size', type: 'custom', element: sizeContainer },
+			{ name: 'heading', type: 'custom', element: headingDropdown.container },
+			{ name: 'lists', type: 'custom', element: listDropdown.container },
+			{ name: 'size', type: 'custom', element: sizeDropdown.container },
 			{ name: 'blockquote', type: 'button', label: lang('WYSIWYG_QUOTE'), action: () => editor.chain().focus().toggleBlockquote().run(), active: () => editor.isActive('blockquote'), icon: '<svg viewBox="0 0 24 24"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg>' },
 			{ name: 'codeBlock', type: 'button', label: lang('WYSIWYG_CODE_BLOCK'), action: () => editor.chain().focus().toggleCodeBlock().run(), active: () => editor.isActive('codeBlock'), icon: '<svg viewBox="0 0 24 24"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>' },
 			{ type: 'separator' },
@@ -1279,7 +1631,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			{ name: 'italic', type: 'button', label: lang('WYSIWYG_ITALIC'), action: () => editor.chain().focus().toggleItalic().run(), active: () => editor.isActive('italic'), icon: '<svg viewBox="0 0 24 24"><path d="M10 4v3h2.21l-3.42 8H6v3h8v-3h-2.21l3.42-8H18V4z"/></svg>' },
 			{ name: 'strike', type: 'button', label: lang('WYSIWYG_S'), action: () => editor.chain().focus().toggleStrike().run(), active: () => editor.isActive('strike'), icon: '<svg viewBox="0 0 24 24"><path d="M10 19h4v-3h-4v3zM5 4v3h5v3h4V7h5V4H5zM3 14h18v-2H3v2z"/></svg>' },
 			{ name: 'underline', type: 'button', label: lang('WYSIWYG_UNDERLINE'), action: () => editor.chain().focus().toggleUnderline().run(), active: () => editor.isActive('underline'), icon: '<svg viewBox="0 0 24 24"><path d="M12 17c3.31 0 6-2.69 6-6V3h-2.5v8c0 1.93-1.57 3.5-3.5 3.5S8.5 12.93 8.5 11V3H6v8c0 3.31 2.69 6 6 6zm-7 2v2h14v-2H5z"/></svg>' },
-			{ name: 'color', type: 'custom', element: colorPickerContainer },
+			{ name: 'color', type: 'custom', element: colorDropdown.container },
 			{ name: 'highlight', type: 'button', label: lang('WYSIWYG_HIGHLIGHT'), action: () => editor.chain().focus().toggleHighlight().run(), active: () => editor.isActive('highlight'), icon: '<svg viewBox="0 0 24 24" style="width: 16px; height: 16px; vertical-align: middle;"><path d="M15.24 8.07l2.69 2.69L9.76 18.93l-2.69-2.69L15.24 8.07zm4.77-1.5l-3.18-3.18c-.39-.39-1.02-.39-1.41 0l-1.49 1.49 4.59 4.59 1.49-1.49c.39-.39.39-1.02 0-1.41zM2 22h5.5l.5-.5-6-6-.5.5V22z"/></svg>' },
 			{ name: 'link', type: 'button', label: lang('WYSIWYG_LINK'), action: () => {
 				const prevUrl = editor.getAttributes('link').href;
@@ -1288,11 +1640,23 @@ document.addEventListener('DOMContentLoaded', () => {
 				if (url === '') {
 					editor.chain().focus().extendMarkRange('link').unsetLink().run();
 				} else {
-					editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+					const cleanUrl = sanitizeUrl(url);
+					if (cleanUrl) {
+						editor.chain().focus().extendMarkRange('link').setLink({ href: cleanUrl }).run();
+					}
 				}
 			}, active: () => editor.isActive('link'), icon: '<svg viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' },
+			{ name: 'image', type: 'button', label: lang('WYSIWYG_IMAGE') || lang('WYSIWYG_PROMPT_IMAGE'), action: () => {
+				const prevUrl = editor.getAttributes('image').src;
+				const url = window.prompt(lang('WYSIWYG_IMAGE_PROMPT') || lang('WYSIWYG_PROMPT_IMAGE'), prevUrl);
+				if (url === null || url === '') return;
+				const cleanUrl = sanitizeUrl(url);
+				if (cleanUrl) {
+					editor.chain().focus().setImage({ src: cleanUrl }).run();
+				}
+			}, active: () => editor.isActive('image'), icon: '<svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>' },
 			{ name: 'hr', type: 'button', label: lang('WYSIWYG_HR'), action: () => editor.chain().focus().setHorizontalRule().run(), active: () => false, icon: '<svg viewBox="0 0 24 24"><path d="M4 11h16v2H4z"/></svg>' },
-			{ name: 'table', type: 'custom', element: tableContainer },
+			{ name: 'table', type: 'custom', element: tableDropdown.container },
 			{ type: 'separator' },
 			{ name: 'superscript', type: 'button', label: lang('WYSIWYG_SUPERSCRIPT'), action: () => editor.chain().focus().toggleSuperscript().run(), active: () => editor.isActive('superscript'), icon: '<svg viewBox="0 0 24 24"><path d="M19.62 9.07c-.02-.13-.06-.25-.13-.36-.08-.12-.17-.22-.29-.29-.12-.07-.25-.12-.39-.14-.14-.02-.29-.02-.43 0H14v1h3.19l-3.69 3.69c-.19.19-.29.44-.29.71s.1.52.29.71.44.29.71.29.52-.1.71-.29l3.69-3.69V15h1v-4.38c0-.14-.01-.29-.04-.43-.02-.14-.07-.27-.14-.39-.08-.12-.18-.21-.29-.28-.11-.08-.24-.13-.37-.15zm-7.91-.71L8.5 11.57l-3.21-3.21-1.41 1.41 3.21 3.21-3.21 3.21 1.41 1.41 3.21-3.21 3.21 3.21 1.41-1.41-3.21-3.21 3.21-3.21-1.41-1.41z"/></svg>' },
 			{ name: 'subscript', type: 'button', label: lang('WYSIWYG_SUBSCRIPT'), action: () => editor.chain().focus().toggleSubscript().run(), active: () => editor.isActive('subscript'), icon: '<svg viewBox="0 0 24 24"><path d="M19.62 15.07c-.02-.13-.06-.25-.13-.36-.08-.12-.17-.22-.29-.29-.12-.07-.25-.12-.39-.14-.14-.02-.29-.02-.43 0H14v1h3.19l-3.69 3.69c-.19.19-.29.44-.29.71s.1.52.29.71.44.29.71.29.52-.1.71-.29l3.69-3.69V21h1v-4.38c0-.14-.01-.29-.04-.43-.02-.14-.07-.27-.14-.39-.08-.12-.18-.21-.29-.28-.11-.08-.24-.13-.37-.15zm-7.91-.71L8.5 17.57l-3.21-3.21-1.41 1.41 3.21 3.21-3.21 3.21 1.41 1.41 3.21-3.21 3.21 3.21 1.41-1.41-3.21-3.21 3.21-3.21-1.41-1.41z"/></svg>' },
@@ -1336,7 +1700,13 @@ document.addEventListener('DOMContentLoaded', () => {
 					button.setAttribute('aria-pressed', btn.active() ? 'true' : 'false');
 				}
 				button.innerHTML = btn.icon;
-				button.addEventListener('click', btn.action);
+				button.addEventListener('mousedown', (e) => {
+					e.preventDefault();
+				});
+				button.addEventListener('click', (e) => {
+					btn.action(e);
+					updateToolbarActiveStates();
+				});
 				toolbarEl.appendChild(button);
 				buttonElements[btn.name] = button;
 			}
@@ -1388,8 +1758,8 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 
-		let isSourceMode = false;
 		function toggleSourceMode() {
+			if (!allowToggleGlobal) return;
 			isSourceMode = !isSourceMode;
 
 			if (isSourceMode) {
@@ -1411,8 +1781,8 @@ document.addEventListener('DOMContentLoaded', () => {
 						textarea.value = data.bbcode;
 						contentEl.style.display = 'none';
 						textarea.style.display = 'block';
-						wysiwygUsed.value = '0';
-						document.body.classList.remove('wysiwyg-active');
+						syncFormWysiwygUsed(form);
+						updateGlobalActiveState();
 					}
 				})
 				.catch(() => {
@@ -1438,8 +1808,8 @@ document.addEventListener('DOMContentLoaded', () => {
 						editor.commands.setContent(data.html);
 						textarea.style.display = 'none';
 						contentEl.style.display = 'block';
-						wysiwygUsed.value = '1';
-						document.body.classList.add('wysiwyg-active');
+						syncFormWysiwygUsed(form);
+						updateGlobalActiveState();
 					}
 				})
 				.catch(() => {
@@ -1449,76 +1819,13 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 
-		// Intercept insert_text function of phpBB to handle native clicks
-		let originalInsertText = window.insert_text;
-		if (originalInsertText) {
-			hookInsertText();
-		} else {
-			let tempInsertText = undefined;
-			Object.defineProperty(window, 'insert_text', {
-				get() {
-					return tempInsertText;
-				},
-				set(val) {
-					originalInsertText = val;
-					tempInsertText = function (text, spaces, popup) {
-						if (isSourceMode) {
-							return originalInsertText(text, spaces, popup);
-						}
-						const textToInsert = spaces ? ' ' + text + ' ' : text;
-						const formData = new FormData();
-						formData.append('action', 'bbcode_to_html');
-						formData.append('bbcode', textToInsert.trim());
-
-						fetch(bbcodeToHtmlUrl || form.action || window.location.href, {
-							method: 'POST',
-							body: formData
-						})
-						.then(res => res.json())
-						.then(data => {
-							if (data.html !== undefined) {
-								editor.chain().focus().insertContent(data.html).run();
-							}
-						})
-						.catch(() => {
-							editor.chain().focus().insertContent(textToInsert).run();
-						});
-					};
-				},
-				configurable: true
-			});
-		}
-
-		function hookInsertText() {
-			window.insert_text = function (text, spaces, popup) {
-				if (isSourceMode) {
-					return originalInsertText(text, spaces, popup);
-				}
-				const textToInsert = spaces ? ' ' + text + ' ' : text;
-				const formData = new FormData();
-				formData.append('action', 'bbcode_to_html');
-				formData.append('bbcode', textToInsert.trim());
-
-				fetch(bbcodeToHtmlUrl || form.action || window.location.href, {
-					method: 'POST',
-					body: formData
-				})
-				.then(res => res.json())
-				.then(data => {
-					if (data.html !== undefined) {
-						editor.chain().focus().insertContent(data.html).run();
-					}
-				})
-				.catch(() => {
-					editor.chain().focus().insertContent(textToInsert).run();
-				});
-			};
-		}
-
 		// Register instance in global registry
 		if (window.phpbbWysiwyg && window.phpbbWysiwyg.instances) {
 			window.phpbbWysiwyg.instances.set(textarea, editor);
 		}
+
+		// Update global active state on document.body
+		updateGlobalActiveState();
 
 		// Dispatch integration event
 		window.dispatchEvent(new CustomEvent('phpbbWysiwygInit', {
