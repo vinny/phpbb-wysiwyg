@@ -151,6 +151,7 @@ class main_listener_test extends \phpbb_test_case
 	public function test_on_s9e_parse_before_wysiwyg_used()
 	{
 		$this->request->vars['wysiwyg_used'] = 1;
+		$this->request->vars['wysiwyg_version'] = 0;
 		$this->converter->bbcodeToReturn = '[b]Hello[/b]';
 		$event = new \phpbb\event\data([
 			'text' => '<strong>Hello</strong>',
@@ -159,6 +160,21 @@ class main_listener_test extends \phpbb_test_case
 		$this->listener->on_s9e_parse_before($event);
 
 		$this->assertEquals('[b]Hello[/b]', $event['text']);
+	}
+
+	public function test_on_s9e_parse_before_wysiwyg_v2()
+	{
+		// In v2, client exported BBCode before submit and marked wysiwyg_version=2
+		$this->request->vars['wysiwyg_used'] = 1;
+		$this->request->vars['wysiwyg_version'] = 2;
+		$event = new \phpbb\event\data([
+			'text' => '[pair left=1 right=2]hello[/pair]',
+		]);
+
+		$this->listener->on_s9e_parse_before($event);
+
+		// Event text must NOT be touched or converted because it is already BBCode
+		$this->assertEquals('[pair left=1 right=2]hello[/pair]', $event['text']);
 	}
 
 	public function test_on_posting_modify_template_vars()

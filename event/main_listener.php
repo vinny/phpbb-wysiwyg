@@ -83,6 +83,13 @@ class main_listener implements EventSubscriberInterface
 			return;
 		}
 
+		// When using the v2 pipeline, the client already exported pure BBCode before form submission
+		if ($this->request->variable('wysiwyg_version', 0) >= 2)
+		{
+			return;
+		}
+
+		// Legacy v1 backward-compatibility fallback
 		if ($this->request->variable('wysiwyg_used', 0))
 		{
 			$html = html_entity_decode($event['text'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -226,7 +233,8 @@ class main_listener implements EventSubscriberInterface
 			'WYSIWYG_TOOLBAR', 'WYSIWYG_CONTENT_AREA', 'WYSIWYG_PROMPT_URL', 'WYSIWYG_PROMPT_IMAGE',
 			'WYSIWYG_CLOSE_MENU', 'WYSIWYG_CUSTOM_BBCODES', 'WYSIWYG_PROMPT_CUSTOM_BBCODE',
 			'WYSIWYG_ATTACHMENT', 'WYSIWYG_SPOILER', 'WYSIWYG_TOO_FEW_CHARS', 'WYSIWYG_TOO_FEW_CHARS_LIMIT',
-			'WYSIWYG_TOO_MANY_CHARS', 'WYSIWYG_TOO_MANY_CHARS_LIMIT'
+			'WYSIWYG_TOO_MANY_CHARS', 'WYSIWYG_TOO_MANY_CHARS_LIMIT',
+			'WYSIWYG_OPAQUE_COPY', 'WYSIWYG_OPAQUE_EDIT', 'WYSIWYG_OPAQUE_REMOVE', 'WYSIWYG_COPIED', 'WYSIWYG_EDIT_BBCODE_TITLE'
 		];
 
 		$translations = [];

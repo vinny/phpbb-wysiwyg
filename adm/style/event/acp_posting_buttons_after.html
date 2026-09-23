@@ -1,5 +1,5 @@
 {% if S_WYSIWYG_ENABLED %}
-	<div id="wysiwyg-editor-container" style="display: none;" data-toggle-enabled="{{ S_WYSIWYG_TOGGLE ? '1' : '0' }}" data-lang="{{ WYSIWYG_LANG_JSON|e('html_attr') }}" data-html-to-bbcode-url="{{ WYSIWYG_HTML_TO_BBCODE_URL }}" data-bbcode-to-html-url="{{ WYSIWYG_BBCODE_TO_HTML_URL }}">
+	<div id="wysiwyg-editor-container" style="display: none;" data-toggle-enabled="{{ S_WYSIWYG_TOGGLE ? '1' : '0' }}" data-min-chars="{{ WYSIWYG_MIN_POST_CHARS }}" data-max-chars="{{ WYSIWYG_MAX_POST_CHARS }}" data-lang="{{ WYSIWYG_LANG_JSON|e('html_attr') }}" data-custom-bbcodes="{{ WYSIWYG_CUSTOM_BBCODES_JSON|e('html_attr') }}" data-html-to-bbcode-url="{{ WYSIWYG_HTML_TO_BBCODE_URL }}" data-bbcode-to-html-url="{{ WYSIWYG_BBCODE_TO_HTML_URL }}">
 		<textarea id="wysiwyg-initial-content" style="display: none;"></textarea>
 	</div>
 {% endif %}

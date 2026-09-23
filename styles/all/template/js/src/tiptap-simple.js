@@ -102,15 +102,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		return trimmed;
 	}
 
-	// Safe HTML entity escaping
-	function escapeHtml(str) {
-		return String(str)
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;')
-			.replace(/'/g, '&#039;');
-	}
 
 	function scan(rootNode = document) {
 		const scope = (rootNode && rootNode.querySelectorAll) ? rootNode : document;
@@ -195,19 +186,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	function syncFormWysiwygUsed(targetForm) {
 		if (!targetForm) return;
-		const wysiwygUsed = targetForm.querySelector('input[name="wysiwyg_used"]');
-		if (!wysiwygUsed) return;
 
-		let anyInWysiwyg = false;
-		if (window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances) {
-			for (const inst of window.phpbbWysiwyg.allInstances) {
-				if (inst.form === targetForm && typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
-					anyInWysiwyg = true;
-					break;
-				}
-			}
+		let wysiwygVersion = targetForm.querySelector('input[name="wysiwyg_version"]');
+		if (!wysiwygVersion) {
+			wysiwygVersion = document.createElement('input');
+			wysiwygVersion.type = 'hidden';
+			wysiwygVersion.name = 'wysiwyg_version';
+			targetForm.appendChild(wysiwygVersion);
 		}
-		wysiwygUsed.value = anyInWysiwyg ? '1' : '0';
+		wysiwygVersion.value = '2';
+
+		const wysiwygUsed = targetForm.querySelector('input[name="wysiwyg_used"]');
+		if (wysiwygUsed) {
+			// In protocol v2, textarea contains pure exported BBCode, so wysiwyg_used is set to 0 for server parser
+			wysiwygUsed.value = '0';
+		}
+	}
+
+	function exportInstanceToBBCode(inst) {
+		if (!inst || !inst.editor || !inst.textarea) {
+			return Promise.resolve('');
+		}
+
+		// If currently in source mode, the textarea already contains the latest BBCode
+		if (typeof inst.isSourceMode === 'function' && inst.isSourceMode()) {
+			inst.lastExportedBBCode = inst.textarea.value;
+			inst.isDirty = false;
+			return Promise.resolve(inst.textarea.value);
+		}
+
+		const currentHtml = inst.editor.getHTML();
+
+		// If HTML hasn't changed and we have a cached BBCode export, reuse it
+		if (!inst.isDirty && inst.lastExportedBBCode !== null && inst.lastExportedHtml === currentHtml) {
+			inst.textarea.value = inst.lastExportedBBCode;
+			return Promise.resolve(inst.lastExportedBBCode);
+		}
+
+		const formData = new FormData();
+		formData.append('action', 'html_to_bbcode');
+		formData.append('html', currentHtml);
+
+		const fetchUrl = htmlToBbcodeUrl || (inst.form ? inst.form.action : '') || window.location.href;
+
+		return fetch(fetchUrl, {
+			method: 'POST',
+			body: formData
+		})
+		.then(res => {
+			if (!res.ok) {
+				throw new Error(`HTTP error ${res.status}`);
+			}
+			return res.json();
+		})
+		.then(data => {
+			if (data && data.bbcode !== undefined) {
+				inst.textarea.value = data.bbcode;
+				inst.lastExportedHtml = currentHtml;
+				inst.lastExportedBBCode = data.bbcode;
+				inst.isDirty = false;
+				return data.bbcode;
+			}
+			throw new Error('Invalid response from html_to_bbcode endpoint');
+		});
 	}
 
 	// Centralized global dispatcher for phpBB's insert_text
@@ -302,9 +343,18 @@ document.addEventListener('DOMContentLoaded', () => {
 			wysiwygUsed = document.createElement('input');
 			wysiwygUsed.type = 'hidden';
 			wysiwygUsed.name = 'wysiwyg_used';
-			wysiwygUsed.value = '1';
 			form.appendChild(wysiwygUsed);
 		}
+		wysiwygUsed.value = '0';
+
+		let wysiwygVersion = form.querySelector('input[name="wysiwyg_version"]');
+		if (!wysiwygVersion) {
+			wysiwygVersion = document.createElement('input');
+			wysiwygVersion.type = 'hidden';
+			wysiwygVersion.name = 'wysiwyg_version';
+			form.appendChild(wysiwygVersion);
+		}
+		wysiwygVersion.value = '2';
 
 		if (target.initialHtml !== null) {
 			bootEditor(editorContainer, textarea, wysiwygUsed, target.initialHtml, form);
@@ -393,9 +443,14 @@ document.addEventListener('DOMContentLoaded', () => {
 			wrapper,
 			contentEl,
 			form,
+			isDirty: false,
+			lastExportedHtml: null,
+			lastExportedBBCode: textarea.value,
+			exportTimer: null,
 			isSourceMode: () => isSourceMode,
 			toggleSourceMode: () => toggleSourceMode(),
-			validateContentLength: () => validateContentLength(instanceRecord.editor, isSourceMode)
+			validateContentLength: () => validateContentLength(instanceRecord.editor, isSourceMode),
+			exportToBBCode: () => exportInstanceToBBCode(instanceRecord)
 		};
 
 		window.phpbbWysiwyg.allInstances.push(instanceRecord);
@@ -622,6 +677,240 @@ document.addEventListener('DOMContentLoaded', () => {
 						return commands.unsetMark(this.name);
 					},
 				};
+			},
+		});
+
+		// Helper functions to safely decode and encode Base64 UTF-8 JSON payloads
+		function decodeOpaquePayload(base64) {
+			if (!base64 || typeof base64 !== 'string') return null;
+			try {
+				const binary = atob(base64);
+				const bytes = new Uint8Array(binary.length);
+				for (let i = 0; i < binary.length; i++) {
+					bytes[i] = binary.charCodeAt(i);
+				}
+				const text = new TextDecoder('utf-8').decode(bytes);
+				const data = JSON.parse(text);
+				if (data && data.version === 1 && data.kind === 'opaque_bbcode' && typeof data.source === 'string') {
+					return data;
+				}
+				return null;
+			} catch {
+				return null;
+			}
+		}
+
+		function encodeOpaquePayload(data) {
+			try {
+				const json = JSON.stringify(data);
+				const bytes = new TextEncoder().encode(json);
+				let binary = '';
+				for (let i = 0; i < bytes.length; i++) {
+					binary += String.fromCharCode(bytes[i]);
+				}
+				return btoa(binary);
+			} catch {
+				return '';
+			}
+		}
+
+		function createOpaqueNodeView(isBlock = false) {
+			return (props) => {
+				let currentNode = props.node;
+				const dom = document.createElement(isBlock ? 'div' : 'span');
+				dom.className = isBlock ? 'wysiwyg-opaque-bbcode wysiwyg-opaque-bbcode--block' : 'wysiwyg-opaque-bbcode';
+				dom.setAttribute('data-opaque-bbcode', 'true');
+				dom.setAttribute('contenteditable', 'false');
+
+				const label = document.createElement('span');
+				label.className = 'wysiwyg-opaque-label';
+				dom.appendChild(label);
+
+				const actions = document.createElement('span');
+				actions.className = 'wysiwyg-opaque-actions';
+
+				function syncFromNode(n) {
+					currentNode = n;
+					const payloadStr = n.attrs.payload || '';
+					dom.setAttribute('data-opaque-payload', payloadStr);
+					const payloadData = decodeOpaquePayload(payloadStr);
+					const displayName = (payloadData && payloadData.displayName) ? payloadData.displayName : 'bbcode';
+					const sourceCode = (payloadData && payloadData.source) ? payloadData.source : '';
+					label.textContent = sourceCode || `[${displayName}]`;
+					label.title = sourceCode || displayName;
+					return { payloadData, displayName, sourceCode };
+				}
+
+				syncFromNode(currentNode);
+
+				// Edit button (✏️)
+				const editBtn = document.createElement('button');
+				editBtn.type = 'button';
+				editBtn.className = 'wysiwyg-opaque-btn wysiwyg-opaque-btn--edit';
+				editBtn.title = lang('WYSIWYG_OPAQUE_EDIT');
+				editBtn.setAttribute('aria-label', lang('WYSIWYG_OPAQUE_EDIT'));
+				editBtn.textContent = '✏️';
+				editBtn.addEventListener('click', e => {
+					e.preventDefault();
+					e.stopPropagation();
+					const payloadStr = currentNode.attrs.payload || '';
+					const payloadData = decodeOpaquePayload(payloadStr);
+					const currentSource = (payloadData && payloadData.source) ? payloadData.source : '';
+					const displayName = (payloadData && payloadData.displayName) ? payloadData.displayName : 'bbcode';
+
+					const newSource = window.prompt(lang('WYSIWYG_EDIT_BBCODE_TITLE'), currentSource);
+					if (newSource !== null && newSource !== currentSource) {
+						const updatedPayload = {
+							...(payloadData || {
+								version: 1,
+								kind: 'opaque_bbcode',
+								displayName: displayName,
+								isBlock: isBlock,
+								definitionFingerprint: ''
+							}),
+							source: newSource
+						};
+						const encoded = encodeOpaquePayload(updatedPayload);
+						if (typeof props.updateAttributes === 'function') {
+							props.updateAttributes({ payload: encoded });
+						}
+						dom.setAttribute('data-opaque-payload', encoded);
+						label.textContent = newSource || `[${displayName}]`;
+						label.title = newSource;
+					}
+				});
+				actions.appendChild(editBtn);
+
+				// Remove button (✕)
+				const removeBtn = document.createElement('button');
+				removeBtn.type = 'button';
+				removeBtn.className = 'wysiwyg-opaque-btn wysiwyg-opaque-btn--remove';
+				removeBtn.title = lang('WYSIWYG_OPAQUE_REMOVE');
+				removeBtn.setAttribute('aria-label', lang('WYSIWYG_OPAQUE_REMOVE'));
+				removeBtn.textContent = '✕';
+				removeBtn.addEventListener('click', e => {
+					e.preventDefault();
+					e.stopPropagation();
+					if (typeof props.getPos === 'function') {
+						const pos = props.getPos();
+						if (typeof pos === 'number' && pos >= 0 && props.editor && props.editor.view) {
+							props.editor.view.dispatch(props.editor.state.tr.delete(pos, pos + currentNode.nodeSize));
+							return;
+						}
+					}
+					if (typeof props.deleteNode === 'function') {
+						try {
+							props.deleteNode();
+						} catch {
+							// fallback
+						}
+					}
+				});
+				actions.appendChild(removeBtn);
+
+				dom.appendChild(actions);
+
+				return {
+					dom,
+					update(updatedNode) {
+						if (updatedNode.type !== currentNode.type) {
+							return false;
+						}
+						syncFromNode(updatedNode);
+						return true;
+					},
+					selectNode() {
+						dom.classList.add('ProseMirror-selectednode');
+					},
+					deselectNode() {
+						dom.classList.remove('ProseMirror-selectednode');
+					},
+					stopEvent(event) {
+						return actions.contains(event.target);
+					},
+					ignoreMutation() {
+						return true;
+					}
+				};
+			};
+		}
+
+		// Setup Opaque BBCode Inline node
+		const OpaqueBbcodeInline = Node.create({
+			name: 'opaqueBbcodeInline',
+			group: 'inline',
+			inline: true,
+			atom: true,
+			selectable: true,
+			draggable: true,
+			addAttributes() {
+				return {
+					payload: {
+						default: '',
+						parseHTML: element => element.getAttribute('data-opaque-payload') || '',
+						renderHTML: attributes => ({
+							'data-opaque-payload': attributes.payload,
+						}),
+					},
+				};
+			},
+			parseHTML() {
+				return [
+					{
+						tag: 'span[data-opaque-bbcode="true"]',
+						priority: 100,
+						getAttrs: dom => {
+							const payload = dom.getAttribute('data-opaque-payload');
+							const valid = decodeOpaquePayload(payload);
+							return valid ? { payload } : false;
+						}
+					}
+				];
+			},
+			renderHTML({ HTMLAttributes }) {
+				return ['span', { ...HTMLAttributes, 'data-opaque-bbcode': 'true', class: 'wysiwyg-opaque-bbcode' }];
+			},
+			addNodeView() {
+				return createOpaqueNodeView(false);
+			},
+		});
+
+		// Setup Opaque BBCode Block node
+		const OpaqueBbcodeBlock = Node.create({
+			name: 'opaqueBbcodeBlock',
+			group: 'block',
+			atom: true,
+			selectable: true,
+			draggable: true,
+			addAttributes() {
+				return {
+					payload: {
+						default: '',
+						parseHTML: element => element.getAttribute('data-opaque-payload') || '',
+						renderHTML: attributes => ({
+							'data-opaque-payload': attributes.payload,
+						}),
+					},
+				};
+			},
+			parseHTML() {
+				return [
+					{
+						tag: 'div[data-opaque-bbcode="true"]',
+						priority: 100,
+						getAttrs: dom => {
+							const payload = dom.getAttribute('data-opaque-payload');
+							const valid = decodeOpaquePayload(payload);
+							return valid ? { payload } : false;
+						}
+					}
+				];
+			},
+			renderHTML({ HTMLAttributes }) {
+				return ['div', { ...HTMLAttributes, 'data-opaque-bbcode': 'true', class: 'wysiwyg-opaque-bbcode wysiwyg-opaque-bbcode--block' }];
+			},
+			addNodeView() {
+				return createOpaqueNodeView(true);
 			},
 		});
 
@@ -934,6 +1223,8 @@ document.addEventListener('DOMContentLoaded', () => {
 				CustomSmiley,
 				CustomBBCode,
 				CustomBBCodeBlock,
+				OpaqueBbcodeInline,
+				OpaqueBbcodeBlock,
 				AttachmentNode,
 				SpoilerNode,
 				KeyboardShortcutsExtension,
@@ -953,18 +1244,18 @@ document.addEventListener('DOMContentLoaded', () => {
 					},
 				}),
 				TableHeader,
-				CharacterCount,
+				CharacterCount.configure({
+					limit: null,
+				}),
 				TextAlign.configure({
 					types: ['heading', 'paragraph'],
+					alignments: ['left', 'center', 'right', 'justify'],
 				}),
 				Superscript,
 				Subscript,
-				Highlight.extend({
-					parseHTML() {
-						return [
-							{ tag: 'mark' },
-							{ tag: 'span[data-bbcode="highlight"]' }
-						];
+				Highlight.configure({
+					HTMLAttributes: {
+						'data-bbcode': 'highlight',
 					},
 					renderHTML({ HTMLAttributes }) {
 						return ['mark', { ...HTMLAttributes, 'data-bbcode': 'highlight' }, 0];
@@ -978,6 +1269,24 @@ document.addEventListener('DOMContentLoaded', () => {
 					role: 'textbox',
 					'aria-multiline': 'true',
 					'aria-label': lang('WYSIWYG_CONTENT_AREA'),
+				},
+				clipboardTextSerializer: (slice) => {
+					let text = '';
+					slice.content.forEach(node => {
+						if (node.type.name === 'opaqueBbcodeInline' || node.type.name === 'opaqueBbcodeBlock') {
+							const data = decodeOpaquePayload(node.attrs.payload);
+							text += data && data.source ? data.source : '';
+						} else {
+							text += node.textBetween(0, node.content.size, '\n\n', leafNode => {
+								if (leafNode.type.name === 'opaqueBbcodeInline' || leafNode.type.name === 'opaqueBbcodeBlock') {
+									const data = decodeOpaquePayload(leafNode.attrs.payload);
+									return data && data.source ? data.source : '';
+								}
+								return leafNode.isText ? leafNode.text : '';
+							});
+						}
+					});
+					return text;
 				},
 				transformPastedHTML: (html) => {
 					if (!html) {
@@ -996,9 +1305,6 @@ document.addEventListener('DOMContentLoaded', () => {
 					if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
 						event.preventDefault();
 						if (form) {
-							if (!isSourceMode) {
-								textarea.value = editor.getHTML();
-							}
 							const submitBtn = form.querySelector('input[type="submit"][name="post"]') ||
 								form.querySelector('input[type="submit"][name="submit"]') ||
 								form.querySelector('button[type="submit"][name="post"]') ||
@@ -1034,12 +1340,19 @@ document.addEventListener('DOMContentLoaded', () => {
 				window.phpbbWysiwyg.activeInstance = instanceRecord;
 			},
 			onUpdate: ({ editor: currentEditor }) => {
-				if (!isSourceMode) {
-					textarea.value = currentEditor.getHTML();
-				}
+				instanceRecord.isDirty = true;
 				// Update character count
 				const count = currentEditor.storage.characterCount.characters();
 				charCountEl.textContent = lang('WYSIWYG_CHARACTERS').replace('%d', count);
+
+				if (instanceRecord.exportTimer) {
+					clearTimeout(instanceRecord.exportTimer);
+				}
+				instanceRecord.exportTimer = setTimeout(() => {
+					if (!isSourceMode) {
+						exportInstanceToBBCode(instanceRecord).catch(() => {});
+					}
+				}, 800);
 			},
 			onTransaction: () => {
 				updateToolbarActiveStates();
@@ -1051,8 +1364,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		instanceRecord.editor = editor;
 
-		// Initial sync
-		textarea.value = editor.getHTML();
+		// Initial state
+		instanceRecord.lastExportedHtml = editor.getHTML();
+		instanceRecord.lastExportedBBCode = textarea.value;
+		instanceRecord.isDirty = false;
 		const initialCount = editor.storage.characterCount.characters();
 		charCountEl.textContent = lang('WYSIWYG_CHARACTERS').replace('%d', initialCount);
 
@@ -1122,25 +1437,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 		if (form && !form.dataset.wysiwygSubmitHooked) {
 			form.dataset.wysiwygSubmitHooked = 'true';
-			form.addEventListener('submit', e => {
+			form.addEventListener('submit', function (e) {
+				// If we already exported and are performing the final programmatic submit, let it pass!
+				if (form.dataset.wysiwygSubmitting === 'true') {
+					delete form.dataset.wysiwygSubmitting;
+					return;
+				}
+
 				const formInstances = (window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances)
 					? window.phpbbWysiwyg.allInstances.filter(inst => inst.form === form)
 					: [];
-
-				let anyWysiwyg = false;
-				for (const inst of formInstances) {
-					if (typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
-						anyWysiwyg = true;
-						if (inst.editor && inst.textarea) {
-							inst.textarea.value = inst.editor.getHTML();
-						}
-					}
-				}
-
-				const formWysiwygUsed = form.querySelector('input[name="wysiwyg_used"]');
-				if (formWysiwygUsed) {
-					formWysiwygUsed.value = anyWysiwyg ? '1' : '0';
-				}
 
 				const submitter = e.submitter;
 				const isPreviewOrDraft = submitter && (submitter.name === 'preview' || submitter.name === 'save');
@@ -1153,6 +1459,75 @@ document.addEventListener('DOMContentLoaded', () => {
 						}
 					}
 				}
+
+				// Ensure protocol v2 metadata is set
+				let wysiwygVersion = form.querySelector('input[name="wysiwyg_version"]');
+				if (!wysiwygVersion) {
+					wysiwygVersion = document.createElement('input');
+					wysiwygVersion.type = 'hidden';
+					wysiwygVersion.name = 'wysiwyg_version';
+					form.appendChild(wysiwygVersion);
+				}
+				wysiwygVersion.value = '2';
+
+				let wysiwygUsed = form.querySelector('input[name="wysiwyg_used"]');
+				if (!wysiwygUsed) {
+					wysiwygUsed = document.createElement('input');
+					wysiwygUsed.type = 'hidden';
+					wysiwygUsed.name = 'wysiwyg_used';
+					form.appendChild(wysiwygUsed);
+				}
+				wysiwygUsed.value = '0';
+
+				// Determine which visual instances need export to BBCode
+				const pendingExports = [];
+				for (const inst of formInstances) {
+					if (typeof inst.isSourceMode === 'function' && !inst.isSourceMode()) {
+						const currentHtml = inst.editor ? inst.editor.getHTML() : '';
+						if (inst.isDirty || inst.lastExportedBBCode === null || inst.lastExportedHtml !== currentHtml) {
+							pendingExports.push(inst);
+						}
+					}
+				}
+
+				if (pendingExports.length === 0) {
+					// All instances already exported and clean! Allow submit to proceed.
+					return;
+				}
+
+				// Intercept submit while we perform async BBCode export
+				e.preventDefault();
+				e.stopPropagation();
+
+				if (submitter) {
+					submitter.disabled = true;
+				}
+
+				Promise.all(pendingExports.map(inst => exportInstanceToBBCode(inst)))
+					.then(() => {
+						if (submitter) {
+							submitter.disabled = false;
+						}
+						form.dataset.wysiwygSubmitting = 'true';
+						if (typeof form.requestSubmit === 'function') {
+							if (submitter) {
+								form.requestSubmit(submitter);
+							} else {
+								form.requestSubmit();
+							}
+						} else if (submitter && typeof submitter.click === 'function') {
+							submitter.click();
+						} else {
+							form.submit();
+						}
+					})
+					.catch(err => {
+						if (submitter) {
+							submitter.disabled = false;
+						}
+						console.error('WYSIWYG BBCode export failed:', err);
+						window.alert('Failed to export editor content to BBCode. Please try again.');
+					});
 			});
 		}
 
@@ -1549,67 +1924,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
 					const { state } = editor;
 					const { from, to, empty } = state.selection;
-					let selectedText = '';
+					let content = '';
 					if (!empty) {
-						selectedText = state.doc.textBetween(from, to, ' ');
+						content = state.doc.textBetween(from, to, ' ');
 					}
 
-					let nodeHtml;
-					if (item.tpl) {
-						let rendered = item.tpl;
-						const contentPlaceholder = `<span data-bbcode-content="true">${selectedText ? escapeHtml(selectedText) : '...'}</span>`;
-						rendered = rendered.replace(/\{(TEXT|SIMPLETEXT|INTTEXT|IDENTIFIER|COLOR|NUMBER|URL)\d*\}/gi, (match) => {
-							if (val && !match.match(/TEXT/i)) {
-								return escapeHtml(val);
-							}
-							return contentPlaceholder;
-						});
+					const hasCloseTag = !item.match || item.match.toLowerCase().includes(`[/${item.tag}]`);
+					if (hasCloseTag && !content) {
+						const promptMsg = item.helpline || lang('WYSIWYG_PROMPT_CUSTOM_BBCODE').replace('%s', item.tag);
+						const input = window.prompt(promptMsg, '');
+						if (input === null) return;
+						content = input;
+					}
 
-						const doc = new window.DOMParser().parseFromString(`<div>${rendered}</div>`, 'text/html');
-						const rootEl = doc.body.firstElementChild;
-						if (rootEl) {
-							const isBlock = /<(div|p|blockquote|table|section|article|aside|pre|h[1-6]|hr)\b/i.test(rendered);
-							if (rootEl.children.length === 1) {
-								const singleChild = rootEl.firstElementChild;
-								singleChild.setAttribute('data-bbcode', item.tag);
-								singleChild.setAttribute('data-custom-bbcode', 'true');
-								if (val) {
-									singleChild.setAttribute('data-bbcode-val', val);
-								}
-								if (isBlock) {
-									let hasInline = false;
-									for (let i = 0; i < singleChild.childNodes.length; i++) {
-										const n = singleChild.childNodes[i];
-										if ((n.nodeType === 3 && n.nodeValue.trim() !== '') || (n.nodeType === 1 && !/^(P|DIV|H[1-6]|BLOCKQUOTE|UL|OL|TABLE|PRE|DETAILS)$/i.test(n.tagName))) {
-											hasInline = true;
-											break;
-										}
-									}
-									if (hasInline && singleChild.children.length === 1 && singleChild.firstElementChild.getAttribute('data-bbcode-content') === 'true') {
-										const contentSpan = singleChild.firstElementChild;
-										const p = doc.createElement('p');
-										singleChild.replaceChild(p, contentSpan);
-										p.appendChild(contentSpan);
-									}
-								}
-								nodeHtml = singleChild.outerHTML;
-							} else {
-								rootEl.setAttribute('data-bbcode', item.tag);
-								rootEl.setAttribute('data-custom-bbcode', 'true');
-								if (val) {
-									rootEl.setAttribute('data-bbcode-val', val);
-								}
-								nodeHtml = rootEl.outerHTML;
-							}
-						} else {
-							nodeHtml = rendered;
-						}
+					const isBlock = item.is_block || /<(div|p|blockquote|table|section|article|aside|pre|h[1-6]|hr)\b/i.test(item.tpl || '');
+					const openTag = val ? `[${item.tag}=${val}]` : `[${item.tag}]`;
+					const closeTag = hasCloseTag ? `[/${item.tag}]` : '';
+					const source = hasCloseTag ? `${openTag}${content}${closeTag}` : openTag;
+
+					const payload = {
+						version: 1,
+						kind: 'opaque_bbcode',
+						source: source,
+						displayName: item.tag,
+						isBlock: isBlock,
+						definitionFingerprint: item.fingerprint || ''
+					};
+					const encoded = encodeOpaquePayload(payload);
+
+					if (isBlock) {
+						editor.chain().focus().insertContent({
+							type: 'opaqueBbcodeBlock',
+							attrs: { payload: encoded }
+						}).run();
 					} else {
-						const content = selectedText ? escapeHtml(selectedText) : '...';
-						nodeHtml = `<span data-bbcode="${escapeHtml(item.tag)}" data-custom-bbcode="true"${val ? ` data-bbcode-val="${escapeHtml(val)}"` : ''}><span data-bbcode-content="true">${content}</span></span>`;
+						editor.chain().focus().insertContent({
+							type: 'opaqueBbcodeInline',
+							attrs: { payload: encoded }
+						}).run();
 					}
-
-					editor.chain().focus().insertContent(nodeHtml).run();
 				});
 
 				customBbcodesRow.appendChild(btn);
@@ -1763,32 +2116,20 @@ document.addEventListener('DOMContentLoaded', () => {
 			isSourceMode = !isSourceMode;
 
 			if (isSourceMode) {
-				const html = editor.getHTML();
 				contentEl.style.opacity = '0.5';
-
-				const formData = new FormData();
-				formData.append('action', 'html_to_bbcode');
-				formData.append('html', html);
-
-				fetch(htmlToBbcodeUrl || form.action || window.location.href, {
-					method: 'POST',
-					body: formData
-				})
-				.then(res => res.json())
-				.then(data => {
-					contentEl.style.opacity = '1';
-					if (data.bbcode !== undefined) {
-						textarea.value = data.bbcode;
+				exportInstanceToBBCode(instanceRecord)
+					.then(bbcode => {
+						contentEl.style.opacity = '1';
+						textarea.value = bbcode;
 						contentEl.style.display = 'none';
 						textarea.style.display = 'block';
 						syncFormWysiwygUsed(form);
 						updateGlobalActiveState();
-					}
-				})
-				.catch(() => {
-					contentEl.style.opacity = '1';
-					isSourceMode = false;
-				});
+					})
+					.catch(() => {
+						contentEl.style.opacity = '1';
+						isSourceMode = false;
+					});
 			} else {
 				const bbcode = textarea.value;
 				contentEl.style.opacity = '0.5';
@@ -1806,6 +2147,9 @@ document.addEventListener('DOMContentLoaded', () => {
 					contentEl.style.opacity = '1';
 					if (data.html !== undefined) {
 						editor.commands.setContent(data.html);
+						instanceRecord.lastExportedHtml = editor.getHTML();
+						instanceRecord.lastExportedBBCode = bbcode;
+						instanceRecord.isDirty = false;
 						textarea.style.display = 'none';
 						contentEl.style.display = 'block';
 						syncFormWysiwygUsed(form);

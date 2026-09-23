@@ -186,12 +186,53 @@ class converter_test extends \phpbb_test_case
 		$this->parser->xmlToReturn = '<r><HR /></r>';
 		$this->assertEquals('<hr data-bbcode="hr">', $this->converter->toHtml('[hr]'));
 
-		// Test Custom BBCode fallback
+		// Test Custom BBCode wrapped in opaque envelope
 		$this->parser->xmlToReturn = '<r><C><s>[c]</s>inline code<e>[/c]</e></C></r>';
-		$this->assertEquals('<p><span data-bbcode="c" data-custom-bbcode="true">inline code</span></p>', $this->converter->toHtml('[c]inline code[/c]'));
+		$html = $this->converter->toHtml('[c]inline code[/c]');
+		$this->assertStringContainsString('data-opaque-bbcode="true"', $html);
+		$this->assertStringContainsString('data-opaque-payload=', $html);
+		$this->assertStringContainsString('[c]', $html);
+		// And roundtrip back to BBCode must reproduce exact source
+		$this->assertEquals('[c]inline code[/c]', $this->converter->toBBCode($html));
 
 		// Test Quotes with metadata
 		$this->parser->xmlToReturn = '<r><QUOTE author="Vinny" post_id="123" time="1700000000" user_id="2"><s>[quote]</s>Quoted text<e>[/quote]</e></QUOTE></r>';
 		$this->assertEquals('<blockquote data-post-id="123" data-time="1700000000" data-user-id="2" data-author="Vinny"><div><cite>Vinny wrote:</cite>Quoted text</div></blockquote>', $this->converter->toHtml('[quote="Vinny" post_id=123 time=1700000000 user_id=2]Quoted text[/quote]'));
+	}
+
+	public function test_opaque_bbcode_roundtrips()
+	{
+		// 1. Complex custom BBCode with attributes
+		$this->parser->xmlToReturn = '<r><PAIR left="um" right="dois"><s>[pair left=um right=dois]</s>meu texto<e>[/pair]</e></PAIR></r>';
+		$html = $this->converter->toHtml('[pair left=um right=dois]meu texto[/pair]');
+		$this->assertStringContainsString('data-opaque-bbcode="true"', $html);
+		$this->assertEquals('[pair left=um right=dois]meu texto[/pair]', $this->converter->toBBCode($html));
+
+		// 2. Surrounding text modified while envelope stays intact (The Core Invariant)
+		$modified_html = '<p>Texto inicial ' . substr($html, 3, -4) . ' texto final</p>';
+		$roundtrip_bbcode = $this->converter->toBBCode($modified_html);
+		$this->assertEquals('Texto inicial [pair left=um right=dois]meu texto[/pair] texto final', $roundtrip_bbcode);
+
+		// 3. Nested custom BBCode preserved entirely inside outer envelope
+		$this->parser->xmlToReturn = '<r><OUTER><s>[outer]</s><INNER><s>[inner]</s>nested content<e>[/inner]</e></INNER><e>[/outer]</e></OUTER></r>';
+		$nested_html = $this->converter->toHtml('[outer][inner]nested content[/inner][/outer]');
+		$this->assertEquals('[outer][inner]nested content[/inner][/outer]', $this->converter->toBBCode($nested_html));
+
+		// 4. Custom BBCode containing special characters, quotes, and whitespace
+		$this->parser->xmlToReturn = '<r><NOTE title="Special &quot;Quote&quot; &amp; &lt;brackets&gt;"><s>[note title="Special &quot;Quote&quot; &amp; &lt;brackets&gt;"]</s>   indented content   <e>[/note]</e></NOTE></r>';
+		$note_html = $this->converter->toHtml('[note title="Special &quot;Quote&quot; &amp; &lt;brackets&gt;"]   indented content   [/note]');
+		$this->assertEquals('[note title="Special "Quote" & <brackets>"]   indented content   [/note]', $this->converter->toBBCode($note_html));
+
+		// 5. Corrupted envelope payload throws exception rather than silent data loss
+		$caught = false;
+		try
+		{
+			$this->converter->toBBCode('<span data-opaque-bbcode="true" data-opaque-payload="invalid-base64-content">[corrupted]</span>');
+		}
+		catch (\InvalidArgumentException $e)
+		{
+			$caught = true;
+		}
+		$this->assertTrue($caught, 'Corrupted envelope payload must throw InvalidArgumentException');
 	}
 }

@@ -58,9 +58,15 @@ class wysiwyg_controller
 		}
 
 		$html = $this->request->raw_variable('html', '');
-		$bbcode = $this->converter->toBBCode($html);
-
-		return new JsonResponse(['bbcode' => $bbcode]);
+		try
+		{
+			$bbcode = $this->converter->toBBCode($html);
+			return new JsonResponse(['bbcode' => $bbcode]);
+		}
+		catch (\Exception $e)
+		{
+			return new JsonResponse(['error' => $e->getMessage()], 400);
+		}
 	}
 
 	/**
@@ -76,7 +82,8 @@ class wysiwyg_controller
 		}
 
 		$bbcode = $this->request->raw_variable('bbcode', '');
-		$html = $this->converter->toHtml($bbcode);
+		// Input from client request must never be treated as trusted server-side s9e XML
+		$html = $this->converter->toHtml($bbcode, false);
 
 		return new JsonResponse(['html' => $html]);
 	}

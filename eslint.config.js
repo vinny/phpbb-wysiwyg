@@ -20,6 +20,12 @@ export default [
 				CustomEvent: 'readonly',
 				setTimeout: 'readonly',
 				clearTimeout: 'readonly',
+				navigator: 'readonly',
+				atob: 'readonly',
+				btoa: 'readonly',
+				Uint8Array: 'readonly',
+				TextDecoder: 'readonly',
+				TextEncoder: 'readonly',
 			},
 		},
 		rules: {

@@ -38,6 +38,15 @@ class converter
 	/** @var array|null */
 	protected $custom_bbcodes_cache = null;
 
+	/** @var \phpbb\textformatter\utils_interface|null */
+	protected $utils;
+
+	/** @var opaque_bbcode_codec */
+	protected $opaque_codec;
+
+	/** @var custom_bbcode_catalog */
+	protected $catalog;
+
 	/**
 	* Constructor
 	*
@@ -48,8 +57,11 @@ class converter
 	* @param \phpbb\language\language $language
 	* @param string $bbcodes_table
 	* @param string $smilies_table
+	* @param \phpbb\textformatter\utils_interface|null $utils
+	* @param opaque_bbcode_codec|null $opaque_codec
+	* @param custom_bbcode_catalog|null $catalog
 	*/
-	public function __construct($db, $config, $phpbb_root_path, $parser, $language, $bbcodes_table = '', $smilies_table = '')
+	public function __construct($db, $config, $phpbb_root_path, $parser, $language, $bbcodes_table = '', $smilies_table = '', $utils = null, $opaque_codec = null, $catalog = null)
 	{
 		$this->db = $db;
 		$this->config = $config;
@@ -58,6 +70,37 @@ class converter
 		$this->language = $language;
 		$this->bbcodes_table = $bbcodes_table ?: (defined('BBCODES_TABLE') ? BBCODES_TABLE : '');
 		$this->smilies_table = $smilies_table ?: (defined('SMILIES_TABLE') ? SMILIES_TABLE : '');
+		$this->utils = $utils;
+		$this->opaque_codec = $opaque_codec ?: new opaque_bbcode_codec();
+		$this->catalog = $catalog ?: new custom_bbcode_catalog($this->db, $this->bbcodes_table);
+	}
+
+	/**
+	* Get opaque BBCode codec
+	*
+	* @return opaque_bbcode_codec
+	*/
+	public function getOpaqueCodec()
+	{
+		if ($this->opaque_codec === null)
+		{
+			$this->opaque_codec = new opaque_bbcode_codec();
+		}
+		return $this->opaque_codec;
+	}
+
+	/**
+	* Get custom BBCode catalog
+	*
+	* @return custom_bbcode_catalog
+	*/
+	public function getCatalog()
+	{
+		if ($this->catalog === null)
+		{
+			$this->catalog = new custom_bbcode_catalog($this->db, $this->bbcodes_table);
+		}
+		return $this->catalog;
 	}
 
 	/**
@@ -74,17 +117,19 @@ class converter
 	* Convert BBCode to TipTap HTML
 	*
 	* @param string $bbcode
+	* @param bool|null $is_trusted_xml
 	* @return string
 	*/
-	public function toHtml($bbcode)
+	public function toHtml($bbcode, $is_trusted_xml = null)
 	{
 		if (empty($bbcode))
 		{
 			return '';
 		}
 
-		// If already s9e XML (from message_parser in quote/edit mode), skip re-parsing
-		if ($this->isS9eXml($bbcode))
+		// Check if trusted XML from internal phpBB caller
+		$allow_xml = ($is_trusted_xml === null) ? $this->isS9eXml($bbcode) : ($is_trusted_xml && $this->isS9eXml($bbcode));
+		if ($allow_xml)
 		{
 			return $this->xmlToHtml($bbcode);
 		}
@@ -133,8 +178,8 @@ class converter
 
 		$bbcode = $this->htmlNodeToBBCode($dom->documentElement);
 
-		// Clean up duplicate newlines at the end or normalize them
-		$bbcode = trim($bbcode);
+		// Clean up duplicate trailing newlines introduced by paragraph wrappers without altering protected envelope contents
+		$bbcode = preg_replace('/(?:\r\n|\r|\n)+$/', '', $bbcode);
 
 		return $bbcode;
 	}
@@ -149,7 +194,7 @@ class converter
 	{
 		$dom = new \DOMDocument();
 		libxml_use_internal_errors(true);
-		if (!$dom->loadXML($xml, LIBXML_NOBLANKS))
+		if (!$dom->loadXML($xml, LIBXML_NONET))
 		{
 			libxml_clear_errors();
 			return '';
@@ -635,104 +680,130 @@ class converter
 						break;
 
 					default:
-						$custom_bbcodes = $this->loadCustomBBCodes();
 						$clean_tag = strtolower($tag_name);
 
-						$attrs = [];
-						foreach ($child->attributes as $attr)
+						// Extract exact source for this custom BBCode subtree losslessly
+						$source = $this->unparseXmlNode($child);
+
+						$is_block = false;
+						if ($this->getCatalog()->isBlock($clean_tag))
 						{
-							$attrs[$attr->name] = $attr->value;
-						}
-
-						if (isset($custom_bbcodes[$clean_tag]) && !empty($custom_bbcodes[$clean_tag]['tpl']))
-						{
-							$bb_info = $custom_bbcodes[$clean_tag];
-							$tpl = $bb_info['tpl'];
-							$val = !empty($attrs) ? reset($attrs) : '';
-
-							$temp_doc = new \DOMDocument();
-							libxml_use_internal_errors(true);
-							$parsed_ok = $temp_doc->loadHTML('<?xml encoding="utf-8" ?><div>' . $tpl . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-							libxml_clear_errors();
-
-							if ($parsed_ok && $temp_doc->documentElement && $temp_doc->documentElement->firstChild)
+							if ($parent->nodeName === 'div')
 							{
-								$tpl_root = $temp_doc->documentElement->firstChild;
-								$imported_tpl = null;
-								if ($tpl_root->childNodes->length === 1 && $tpl_root->firstChild->nodeType === XML_ELEMENT_NODE)
-								{
-									$imported_tpl = $html_dom->importNode($tpl_root->firstChild, true);
-								}
-								else
-								{
-									$imported_tpl = $html_dom->importNode($tpl_root, true);
-								}
-
-								if ($imported_tpl)
-								{
-									$imported_tpl->setAttribute('data-bbcode', $clean_tag);
-									$imported_tpl->setAttribute('data-custom-bbcode', 'true');
-									if ($val !== '')
-									{
-										$imported_tpl->setAttribute('data-bbcode-val', $val);
-									}
-									if (!empty($attrs))
-									{
-										$imported_tpl->setAttribute('data-bbcode-attrs', json_encode($attrs));
-									}
-
-									$imp_xpath = new \DOMXPath($html_dom);
-									$imp_text_nodes = $imp_xpath->query('.//text()[contains(., "{")]', $imported_tpl);
-									$target_text_node = null;
-									foreach ($imp_text_nodes as $itn)
-									{
-										if (preg_match('/\{(TEXT|SIMPLETEXT|INTTEXT|IDENTIFIER|COLOR|NUMBER|URL)\d*\}/i', $itn->nodeValue))
-										{
-											$target_text_node = $itn;
-											break;
-										}
-									}
-
-									if ($target_text_node && $target_text_node->parentNode)
-									{
-										$content_parent = $target_text_node->parentNode;
-										$content_wrapper = $html_dom->createElement('span');
-										$content_wrapper->setAttribute('data-bbcode-content', 'true');
-										$content_parent->replaceChild($content_wrapper, $target_text_node);
-										$this->convertNodes($child, $html_dom, $content_wrapper);
-									}
-									else
-									{
-										$content_wrapper = $html_dom->createElement('span');
-										$content_wrapper->setAttribute('data-bbcode-content', 'true');
-										$imported_tpl->appendChild($content_wrapper);
-										$this->convertNodes($child, $html_dom, $content_wrapper);
-									}
-
-									$parent->appendChild($imported_tpl);
-									break;
-								}
+								$is_block = true;
 							}
 						}
 
-						// Fallback mapping
-						$el = $html_dom->createElement('span');
-						$el->setAttribute('data-bbcode', $clean_tag);
-						$el->setAttribute('data-custom-bbcode', 'true');
-
-						if (!empty($attrs))
-						{
-							$first_attr_val = reset($attrs);
-							$el->setAttribute('data-bbcode-val', $first_attr_val);
-							$el->setAttribute('data-bbcode-attrs', json_encode($attrs));
-						}
-
-						$parent->appendChild($el);
-						$this->convertNodes($child, $html_dom, $el);
+						$fingerprint = $this->getCatalog()->getFingerprint($clean_tag);
+						$payload = $this->getOpaqueCodec()->createEnvelope($source, $clean_tag, $is_block, $fingerprint);
+						$opaque_el = $this->getOpaqueCodec()->renderEnvelopeElement($html_dom, $payload);
+						$parent->appendChild($opaque_el);
 						break;
 				}
 			}
 		}
+	}
+
+	/**
+	* Recover exact BBCode source from an s9e XML node
+	*
+	* @param \DOMNode $node
+	* @return string
+	*/
+	protected function unparseXmlNode(\DOMNode $node)
+	{
+		$doc = new \DOMDocument('1.0', 'UTF-8');
+		$imported = $doc->importNode($node, true);
+		$doc->appendChild($imported);
+		$node_xml = $doc->saveXML($imported);
+
+		if ($this->utils !== null && method_exists($this->utils, 'unparse'))
+		{
+			try
+			{
+				return $this->utils->unparse('<r>' . $node_xml . '</r>');
+			}
+			catch (\Exception $e)
+			{
+				// Fallback to internal unparser
+			}
+		}
+
+		if (class_exists('\\s9e\\TextFormatter\\Unparser'))
+		{
+			try
+			{
+				return \s9e\TextFormatter\Unparser::unparse('<r>' . $node_xml . '</r>');
+			}
+			catch (\Exception $e)
+			{
+				// Fallback to internal unparser
+			}
+		}
+
+		return $this->fallbackUnparseNode($node);
+	}
+
+	/**
+	* Fallback unparser using s9e <s> and <e> tags
+	*
+	* @param \DOMNode $node
+	* @return string
+	*/
+	protected function fallbackUnparseNode(\DOMNode $node)
+	{
+		$s_node = null;
+		$e_node = null;
+		$inner = '';
+
+		foreach ($node->childNodes as $child)
+		{
+			if ($child->nodeType === XML_ELEMENT_NODE)
+			{
+				$name = strtolower($child->nodeName);
+				if ($name === 's')
+				{
+					$s_node = $child;
+					continue;
+				}
+				if ($name === 'e')
+				{
+					$e_node = $child;
+					continue;
+				}
+				$inner .= $this->fallbackUnparseNode($child);
+			}
+			else if ($child->nodeType === XML_TEXT_NODE)
+			{
+				$inner .= $child->nodeValue;
+			}
+		}
+
+		if ($s_node !== null)
+		{
+			$start = $s_node->textContent;
+			$end = $e_node !== null ? $e_node->textContent : '';
+			return $start . $inner . $end;
+		}
+
+		$tag = strtolower($node->nodeName);
+		$attrs_str = '';
+		if ($node->hasAttributes())
+		{
+			foreach ($node->attributes as $attr)
+			{
+				if (strtolower($attr->name) === $tag)
+				{
+					$attrs_str = '=' . $attr->value . $attrs_str;
+				}
+				else
+				{
+					$attrs_str .= ' ' . $attr->name . '="' . $attr->value . '"';
+				}
+			}
+		}
+
+		return '[' . $tag . $attrs_str . ']' . $inner . '[/' . $tag . ']';
 	}
 
 	/**
@@ -761,6 +832,17 @@ class converter
 				if ($tag_name === 'summary')
 				{
 					continue;
+				}
+
+				// Check for opaque envelope FIRST (lossless protected custom BBCode)
+				if ($child->hasAttribute('data-opaque-payload') || $child->getAttribute('data-opaque-bbcode') === 'true')
+				{
+					$source = $this->getOpaqueCodec()->extractSourceFromNode($child);
+					if ($source !== null)
+					{
+						$bbcode .= $source;
+						continue;
+					}
 				}
 
 				// Custom BBCode via data-bbcode
@@ -1235,18 +1317,23 @@ class converter
 		];
 
 		$posting_bbcodes = [];
+		$catalog_defs = $this->getCatalog()->getDefinitions();
+
 		foreach ($all as $clean_tag => $data)
 		{
 			if ($data['display_on_posting'] === 1 && !in_array($clean_tag, $excluded))
 			{
+				$cat_def = isset($catalog_defs[$clean_tag]) ? $catalog_defs[$clean_tag] : null;
 				$posting_bbcodes[] = [
-					'id'        => $data['id'],
-					'name'      => $data['name'],
-					'tag'       => $data['tag'],
-					'helpline'  => $data['helpline'],
-					'has_val'   => $data['has_val'],
-					'tpl'       => $data['tpl'],
-					'match'     => $data['match'],
+					'id'          => $data['id'],
+					'name'        => $data['name'],
+					'tag'         => $data['tag'],
+					'helpline'    => $data['helpline'],
+					'has_val'     => $data['has_val'],
+					'tpl'         => $data['tpl'],
+					'match'       => $data['match'],
+					'is_block'    => $cat_def ? $cat_def['is_block'] : false,
+					'fingerprint' => $cat_def ? $cat_def['fingerprint'] : '',
 				];
 			}
 		}

@@ -572,3 +572,84 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	border-radius: 2px;
 	padding: 0 2px;
 }
+
+/* Opaque protected custom BBCode envelopes */
+.wysiwyg-opaque-bbcode {
+	display: inline-flex;
+	align-items: center;
+	vertical-align: middle;
+	background-color: rgba(63, 156, 219, 0.08);
+	border: 1px solid rgba(63, 156, 219, 0.35);
+	border-radius: 4px;
+	padding: 1px 4px;
+	margin: 0 2px;
+	font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+	font-size: 12px;
+	user-select: all;
+	cursor: default;
+	gap: 4px;
+	line-height: normal;
+}
+
+.wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--block {
+	display: flex;
+	margin: 8px 0;
+	padding: 6px 10px;
+	background-color: rgba(63, 156, 219, 0.06);
+	border: 1px dashed rgba(63, 156, 219, 0.4);
+	border-radius: 6px;
+	justify-content: space-between;
+}
+
+.wysiwyg-opaque-bbcode.ProseMirror-selectednode {
+	outline: 2px solid #3f9cdb;
+	border-color: #3f9cdb;
+	background-color: rgba(63, 156, 219, 0.18);
+}
+
+.wysiwyg-opaque-label {
+	font-weight: 600;
+	color: #2b78b5;
+	letter-spacing: 0.2px;
+	max-width: 350px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wysiwyg-opaque-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.wysiwyg-opaque-btn {
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	cursor: pointer;
+	padding: 1px 3px;
+	font-size: 11px;
+	line-height: 1;
+	color: inherit;
+	opacity: 0.7;
+	transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.wysiwyg-opaque-btn:hover {
+	opacity: 1;
+	background-color: rgba(128, 128, 128, 0.2);
+	border-color: rgba(128, 128, 128, 0.3);
+}
+
+.wysiwyg-opaque-btn:focus-visible {
+	outline: 2px solid #3f9cdb;
+	opacity: 1;
+}
+
+.wysiwyg-opaque-btn--remove:hover {
+	color: #d32f2f;
+	background-color: rgba(211, 47, 47, 0.1);
+	border-color: rgba(211, 47, 47, 0.2);
+}
+

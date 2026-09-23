@@ -114,4 +114,9 @@ $lang = array_merge($lang, [
 	'WYSIWYG_TOO_FEW_CHARS_LIMIT'	=> 'Your message contains %1$d characters. The minimum number of characters you need to enter is %2$d.',
 	'WYSIWYG_TOO_MANY_CHARS'		=> 'Your message contains too many characters.',
 	'WYSIWYG_TOO_MANY_CHARS_LIMIT'	=> 'Your message contains %1$d characters. The maximum number of allowed characters is %2$d.',
+	'WYSIWYG_OPAQUE_COPY'			=> 'Copy BBCode',
+	'WYSIWYG_OPAQUE_EDIT'			=> 'Edit BBCode',
+	'WYSIWYG_OPAQUE_REMOVE'			=> 'Remove',
+	'WYSIWYG_COPIED'				=> 'Copied!',
+	'WYSIWYG_EDIT_BBCODE_TITLE'		=> 'Edit custom BBCode source:',
 ]);
