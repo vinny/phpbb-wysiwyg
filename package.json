@@ -15,6 +15,9 @@
     "stylelint": "^17.14.1",
     "stylelint-config-standard": "^40.0.0"
   },
+  "overrides": {
+    "js-yaml": "^4.3.2"
+  },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",
     "@tiptap/core": "^3.31.0",
