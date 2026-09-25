@@ -760,6 +760,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 					const newSource = window.prompt(lang('WYSIWYG_EDIT_BBCODE_TITLE'), currentSource);
 					if (newSource !== null && newSource !== currentSource) {
+						let newDisplayName = displayName;
+						const matchTag = newSource.match(/^\[([a-z0-9_-]+)/i);
+						if (matchTag && matchTag[1]) {
+							newDisplayName = matchTag[1].toLowerCase();
+						}
+
 						const updatedPayload = {
 							...(payloadData || {
 								version: 1,
@@ -768,15 +774,62 @@ document.addEventListener('DOMContentLoaded', () => {
 								isBlock: isBlock,
 								definitionFingerprint: ''
 							}),
+							displayName: newDisplayName,
 							source: newSource
 						};
 						const encoded = encodeOpaquePayload(updatedPayload);
-						if (typeof props.updateAttributes === 'function') {
-							props.updateAttributes({ payload: encoded });
-						}
+
+						// Always update the visual DOM elements immediately
 						dom.setAttribute('data-opaque-payload', encoded);
-						label.textContent = newSource || `[${displayName}]`;
+						label.textContent = newSource || `[${newDisplayName}]`;
 						label.title = newSource;
+
+						let pos = null;
+						if (typeof props.getPos === 'function') {
+							try {
+								pos = props.getPos();
+							} catch {
+								pos = null;
+							}
+						}
+
+						const editorView = props.view || (props.editor && props.editor.view);
+						if (editorView && (typeof pos !== 'number' || isNaN(pos) || pos < 0)) {
+							editorView.state.doc.descendants((node, p) => {
+								if (node.attrs && node.attrs.payload === payloadStr) {
+									pos = p;
+									return false;
+								}
+								return true;
+							});
+						}
+
+						if (typeof pos === 'number' && !isNaN(pos) && pos >= 0 && editorView) {
+							const { state } = editorView;
+							const nodeAtPos = state.doc.nodeAt(pos);
+							const currentAttrs = (nodeAtPos && nodeAtPos.attrs) ? nodeAtPos.attrs : (currentNode.attrs || {});
+							const tr = state.tr.setNodeMarkup(pos, null, {
+								...currentAttrs,
+								payload: encoded
+							});
+							editorView.dispatch(tr);
+						}
+
+						if (props.editor && window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances) {
+							window.phpbbWysiwyg.allInstances.forEach(inst => {
+								if (inst.editor === props.editor) {
+									inst.isDirty = true;
+									if (inst.exportTimer) {
+										clearTimeout(inst.exportTimer);
+									}
+									inst.exportTimer = setTimeout(() => {
+										if (!inst.isSourceMode || !inst.isSourceMode()) {
+											exportInstanceToBBCode(inst).catch(() => {});
+										}
+									}, 50);
+								}
+							});
+						}
 					}
 				});
 				actions.appendChild(editBtn);
@@ -791,12 +844,45 @@ document.addEventListener('DOMContentLoaded', () => {
 				removeBtn.addEventListener('click', e => {
 					e.preventDefault();
 					e.stopPropagation();
+					let pos = null;
 					if (typeof props.getPos === 'function') {
-						const pos = props.getPos();
-						if (typeof pos === 'number' && pos >= 0 && props.editor && props.editor.view) {
-							props.editor.view.dispatch(props.editor.state.tr.delete(pos, pos + currentNode.nodeSize));
-							return;
+						try {
+							pos = props.getPos();
+						} catch {
+							pos = null;
 						}
+					}
+					const editorView = props.view || (props.editor && props.editor.view);
+					if (editorView && (typeof pos !== 'number' || isNaN(pos) || pos < 0)) {
+						const currentPayload = (currentNode && currentNode.attrs) ? currentNode.attrs.payload : dom.getAttribute('data-opaque-payload');
+						editorView.state.doc.descendants((node, p) => {
+							if (node.attrs && node.attrs.payload === currentPayload) {
+								pos = p;
+								return false;
+							}
+							return true;
+						});
+					}
+					if (typeof pos === 'number' && !isNaN(pos) && pos >= 0 && editorView) {
+						const nodeAtPos = editorView.state.doc.nodeAt(pos);
+						const size = (nodeAtPos && nodeAtPos.nodeSize) || (currentNode && currentNode.nodeSize) || 1;
+						editorView.dispatch(editorView.state.tr.delete(pos, pos + size));
+						if (props.editor && window.phpbbWysiwyg && window.phpbbWysiwyg.allInstances) {
+							window.phpbbWysiwyg.allInstances.forEach(inst => {
+								if (inst.editor === props.editor) {
+									inst.isDirty = true;
+									if (inst.exportTimer) {
+										clearTimeout(inst.exportTimer);
+									}
+									inst.exportTimer = setTimeout(() => {
+										if (!inst.isSourceMode || !inst.isSourceMode()) {
+											exportInstanceToBBCode(inst).catch(() => {});
+										}
+									}, 50);
+								}
+							});
+						}
+						return;
 					}
 					if (typeof props.deleteNode === 'function') {
 						try {
@@ -1342,7 +1428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 			onUpdate: ({ editor: currentEditor }) => {
 				instanceRecord.isDirty = true;
 				// Update character count
-				const count = currentEditor.storage.characterCount.characters();
+				const count = calculateContentCharacters(currentEditor);
 				charCountEl.textContent = lang('WYSIWYG_CHARACTERS').replace('%d', count);
 
 				if (instanceRecord.exportTimer) {
@@ -1362,13 +1448,26 @@ document.addEventListener('DOMContentLoaded', () => {
 			},
 		});
 
+		function calculateContentCharacters(currentEditor) {
+			let total = currentEditor.storage.characterCount.characters();
+			currentEditor.state.doc.descendants(node => {
+				if (node.type.name === 'opaqueBbcodeInline' || node.type.name === 'opaqueBbcodeBlock') {
+					const payload = decodeOpaquePayload(node.attrs.payload);
+					if (payload && payload.source) {
+						total += payload.source.length;
+					}
+				}
+			});
+			return total;
+		}
+
 		instanceRecord.editor = editor;
 
 		// Initial state
 		instanceRecord.lastExportedHtml = editor.getHTML();
 		instanceRecord.lastExportedBBCode = textarea.value;
 		instanceRecord.isDirty = false;
-		const initialCount = editor.storage.characterCount.characters();
+		const initialCount = calculateContentCharacters(editor);
 		charCountEl.textContent = lang('WYSIWYG_CHARACTERS').replace('%d', initialCount);
 
 		// Synchronize on form submit and validate post length
@@ -1388,22 +1487,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			const text = currentEditor.getText().trim();
 			let hasNonTextNodes = false;
+			let customBbcodeChars = 0;
 			currentEditor.state.doc.descendants(node => {
 				if (['image', 'attachment', 'table', 'smiley', 'customSmiley'].includes(node.type.name)) {
 					hasNonTextNodes = true;
 					return false;
 				}
+				if (node.type.name === 'opaqueBbcodeInline' || node.type.name === 'opaqueBbcodeBlock') {
+					hasNonTextNodes = true;
+					const payload = decodeOpaquePayload(node.attrs.payload);
+					if (payload && payload.source) {
+						customBbcodeChars += payload.source.length;
+					}
+					return false;
+				}
 				return true;
 			});
 
-			if (!hasNonTextNodes && text.length < minChars) {
-				showMinLengthError(text.length);
+			const effectiveLength = text.length + customBbcodeChars;
+
+			if (!hasNonTextNodes && effectiveLength < minChars) {
+				showMinLengthError(effectiveLength);
 				currentEditor.chain().focus().run();
 				return false;
 			}
 
-			if (maxChars > 0 && text.length > maxChars) {
-				showMaxLengthError(text.length);
+			if (maxChars > 0 && effectiveLength > maxChars) {
+				showMaxLengthError(effectiveLength);
 				currentEditor.chain().focus().run();
 				return false;
 			}
