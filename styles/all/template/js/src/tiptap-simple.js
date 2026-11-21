@@ -785,8 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		// Quote BBCode attribute value when required by s9e\TextFormatter
 		function quoteBBCodeAttr(value, forceQuote = false) {
 			const str = String(value);
-			if (forceQuote || /[\s\]="']/.test(str)) {
-				return `"${str.replace(/"/g, '\\"')}"`;
+			if (forceQuote || /[\s\]="'\\]/.test(str)) {
+				return `"${str.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 			}
 			return str;
 		}
@@ -916,10 +916,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 			if (Array.isArray(schema.attributes) && schema.attributes.length > 0) {
 				const parsedAttrs = {};
-				const attrRe = /([a-zA-Z0-9_-]+)=(?:"((?:\\.|[^"])*)"|'((?:\\.|[^'])*)'|([^\s\]]+))/g;
+				const attrRe = /([a-zA-Z0-9_-]+)=(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s\]]+))/g;
 				let am;
 				while ((am = attrRe.exec(rawAttrsStr)) !== null) {
-					const attrVal = am[2] !== undefined ? am[2].replace(/\\"/g, '"') : (am[3] !== undefined ? am[3] : (am[4] || ''));
+					const attrVal = am[2] !== undefined
+						? am[2].replace(/\\([\\"])/g, '$1')
+						: (am[3] !== undefined ? am[3].replace(/\\([\\'])/g, '$1') : (am[4] || ''));
 					parsedAttrs[am[1].toLowerCase()] = attrVal;
 				}
 				for (const attr of schema.attributes) {
