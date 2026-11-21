@@ -74,7 +74,10 @@ class main_listener_test extends \phpbb_test_case
 	protected $listener;
 	protected $request;
 	protected $converter;
+	protected $config;
+	protected $user;
 	protected $template;
+	protected $helper;
 
 	public function setUp(): void
 	{
@@ -133,7 +136,7 @@ class main_listener_test extends \phpbb_test_case
 		$this->listener->on_user_setup($event);
 
 		$this->assertCount(1, $this->user->loaded_langs);
-		$this->assertEquals(['vinny/wysiwyg', 'info_acp_wysiwyg'], $this->user->loaded_langs[0]);
+		$this->assertEquals(['vinny/wysiwyg', 'common'], $this->user->loaded_langs[0]);
 	}
 
 	public function test_on_s9e_parse_before_wysiwyg_not_used()

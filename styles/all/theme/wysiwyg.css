@@ -1,5 +1,25 @@
 /* WYSIWYG Editor style for phpBB vinny/wysiwyg */
 
+:root {
+	--wysiwyg-surface: #ffffff;
+	--wysiwyg-surface-alt: #f4f4f4;
+	--wysiwyg-surface-hover: #e9e9e9;
+	--wysiwyg-text: #222222;
+	--wysiwyg-text-muted: #555555;
+	--wysiwyg-text-subtle: #666666;
+	--wysiwyg-accent: #3f9cdb;
+	--wysiwyg-accent-strong: #2b78b5;
+	--wysiwyg-accent-hover: #1f5f92;
+	--wysiwyg-accent-text: #115588;
+	--wysiwyg-accent-bg: #eaf3f8;
+	--wysiwyg-accent-bg-active: #d8e8f2;
+	--wysiwyg-border-muted: #cccccc;
+	--wysiwyg-danger: #d32f2f;
+	--wysiwyg-danger-text: #b71c1c;
+	--wysiwyg-danger-bg: #ffebee;
+	--wysiwyg-danger-border: #ef9a9a;
+}
+
 .wysiwyg-editor-wrapper {
 	width: 100%;
 	max-width: 100%;
@@ -224,6 +244,14 @@
 	max-width: none;
 }
 
+.wysiwyg-content-area .ProseMirror img.emoji {
+	width: 1.2em;
+	height: 1.2em;
+	vertical-align: -0.15em;
+	display: inline-block;
+	max-width: none;
+}
+
 .wysiwyg-content-area .ProseMirror span[data-bbcode]:not([data-bbcode="size"]):not([data-bbcode="color"]):not([data-bbcode="align"]):not([data-bbcode="highlight"]):not([data-custom-bbcode]) {
 	background-color: rgba(63, 156, 219, 0.12);
 	border: 1px dashed rgba(63, 156, 219, 0.4);
@@ -248,28 +276,57 @@
 	min-width: 0;
 }
 
-/* Attachment styling inside editor */
+/* Attachment styling inside editor (matches native phpBB / prosilver inline-attachment) */
 .ProseMirror .wysiwyg-attachment {
-	display: block;
-	background-color: rgba(128, 128, 128, 0.08);
-	border: 1px solid rgba(128, 128, 128, 0.25);
-	border-radius: 4px;
-	padding: 8px 12px;
-	margin: 10px 0;
-	font-family: inherit;
-	font-size: 13px;
+	display: inline-block;
+	max-width: 100%;
+	box-sizing: border-box;
+	background: transparent;
+	border: none;
+	padding: 0;
+	margin: 4px 0;
 	color: inherit;
-	cursor: default;
+	cursor: pointer;
 	user-select: none;
+	border-radius: 2px;
+	transition: outline-color 0.15s ease;
 }
 
-.ProseMirror .wysiwyg-attachment::before {
-	content: "📎 ";
+.ProseMirror .wysiwyg-attachment dl.file {
+	margin: 0;
+	padding: 0;
+	display: block;
+}
+
+.ProseMirror .wysiwyg-attachment dl.file dt {
+	margin: 0;
+	padding: 0;
+	font-weight: 700;
+	line-height: 1.4;
+}
+
+.ProseMirror .wysiwyg-attachment dl.file dd {
+	margin: 2px 0 0;
+	padding: 0;
+	opacity: 0.75;
+}
+
+.ProseMirror .wysiwyg-attachment .attach-image img.postimage {
+	display: block;
+	max-width: 100%;
+	max-height: 360px;
+	height: auto;
+	margin-bottom: 4px;
 }
 
 .ProseMirror .wysiwyg-attachment:hover {
-	background-color: rgba(128, 128, 128, 0.15);
-	border-color: rgba(128, 128, 128, 0.35);
+	outline: 1px dashed rgba(63, 156, 219, 0.55);
+	outline-offset: 2px;
+}
+
+.ProseMirror .wysiwyg-attachment.ProseMirror-selectednode {
+	outline: 2px solid #3f9cdb;
+	outline-offset: 2px;
 }
 
 /* Spoiler details styling */
@@ -396,8 +453,8 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	font-size: 13px;
 	text-align: left;
 	list-style: none;
-	background-color: #ffffff;
-	color: #333333;
+	background-color: var(--wysiwyg-surface);
+	color: var(--wysiwyg-text);
 	border: 1px solid rgba(128, 128, 128, 0.3);
 	border-radius: 5px;
 	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -411,7 +468,7 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	font-weight: 400;
 	font-size: 13px;
 	line-height: 1.4;
-	color: #333333;
+	color: var(--wysiwyg-text);
 	text-align: inherit;
 	white-space: nowrap;
 	background: transparent;
@@ -423,14 +480,14 @@ table[data-bbcode="table"] tr:nth-child(even) {
 
 .tiptap-dropdown-item:hover,
 .tiptap-dropdown-item:focus {
-	background-color: #eaf3f8;
-	color: #115588;
+	background-color: var(--wysiwyg-accent-bg);
+	color: var(--wysiwyg-accent-text);
 	outline: none;
 }
 
 .tiptap-dropdown-item:active {
-	background-color: #d8e8f2;
-	color: #0b436e;
+	background-color: var(--wysiwyg-accent-bg-active);
+	color: var(--wysiwyg-accent-text);
 }
 
 /* Color Popover */
@@ -465,28 +522,28 @@ table[data-bbcode="table"] tr:nth-child(even) {
 .tiptap-clear-color-btn {
 	display: block;
 	width: 100%;
-	background: #f4f4f4;
-	border: 1px solid #dcdcdc;
+	background: var(--wysiwyg-surface-alt);
+	border: 1px solid var(--wysiwyg-border-muted);
 	border-radius: 3px;
 	padding: 6px;
 	font-size: 11px;
 	font-weight: 600;
-	color: #333333;
+	color: var(--wysiwyg-text);
 	cursor: pointer;
 	text-align: center;
 	transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .tiptap-clear-color-btn:hover {
-	background: #e9e9e9;
-	border-color: #cccccc;
-	color: #111111;
+	background: var(--wysiwyg-surface-hover);
+	border-color: var(--wysiwyg-border-muted);
+	color: var(--wysiwyg-text);
 }
 
 /* Highlight style override */
-.wysiwyg-content-area .ProseMirror mark {
-	background-color: #ffff00 !important;
-	color: #000000 !important;
+.wysiwyg-editor-wrapper .wysiwyg-content-area .ProseMirror mark {
+	background-color: #ffff00;
+	color: #000000;
 	border-radius: 2px;
 	padding: 0 2px;
 }
@@ -566,90 +623,263 @@ table[data-bbcode="table"] tr:nth-child(even) {
 	font-weight: normal;
 }
 
-.ProseMirror .wysiwyg-custom-bbcode {
-	background-color: rgba(128, 128, 128, 0.1);
-	border-bottom: 1px dotted rgba(128, 128, 128, 0.4);
+.ProseMirror .wysiwyg-custom-bbcode:not([style]) {
 	border-radius: 2px;
-	padding: 0 2px;
 }
 
-/* Opaque protected custom BBCode envelopes */
+/* Live-rendered opaque custom BBCode widgets (seamless, no permanent box/buttons) */
 .wysiwyg-opaque-bbcode {
-	display: inline-flex;
-	align-items: center;
-	vertical-align: middle;
-	background-color: rgba(63, 156, 219, 0.08);
-	border: 1px solid rgba(63, 156, 219, 0.35);
-	border-radius: 4px;
-	padding: 1px 4px;
-	margin: 0 2px;
-	font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-	font-size: 12px;
-	user-select: all;
-	cursor: default;
-	gap: 4px;
-	line-height: normal;
+	display: inline-block;
+	vertical-align: baseline;
+	cursor: pointer;
+	border-radius: 3px;
+	transition: outline-color 0.15s ease, background-color 0.15s ease;
 }
 
 .wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--block {
-	display: flex;
-	margin: 8px 0;
-	padding: 6px 10px;
-	background-color: rgba(63, 156, 219, 0.06);
-	border: 1px dashed rgba(63, 156, 219, 0.4);
-	border-radius: 6px;
-	justify-content: space-between;
+	display: block;
+	margin: 6px 0;
+}
+
+.wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--rendered iframe,
+.wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--rendered video,
+.wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--rendered audio {
+	pointer-events: none;
+	max-width: 100%;
+}
+
+.wysiwyg-opaque-bbcode.wysiwyg-opaque-bbcode--fallback {
+	display: inline-block;
+	background-color: rgba(63, 156, 219, 0.08);
+	border: 1px solid rgba(63, 156, 219, 0.35);
+	padding: 1px 6px;
+	margin: 0 2px;
+	font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+	font-size: 12px;
+	color: #2b78b5;
+	max-width: 360px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+
+.wysiwyg-opaque-bbcode:hover {
+	outline: 1px dashed rgba(63, 156, 219, 0.55);
+	outline-offset: 2px;
 }
 
 .wysiwyg-opaque-bbcode.ProseMirror-selectednode {
 	outline: 2px solid #3f9cdb;
-	border-color: #3f9cdb;
-	background-color: rgba(63, 156, 219, 0.18);
+	outline-offset: 2px;
 }
 
-.wysiwyg-opaque-label {
-	font-weight: 600;
-	color: #2b78b5;
-	letter-spacing: 0.2px;
-	max-width: 350px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.wysiwyg-opaque-actions {
-	display: inline-flex;
+/* Dynamic Custom BBCode Modal */
+.wysiwyg-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	background-color: rgba(0, 0, 0, 0.45);
+	display: flex;
 	align-items: center;
-	gap: 2px;
+	justify-content: center;
+	padding: 16px;
+	box-sizing: border-box;
 }
 
-.wysiwyg-opaque-btn {
+.wysiwyg-modal {
+	background-color: var(--wysiwyg-surface);
+	color: var(--wysiwyg-text);
+	border: 1px solid rgba(128, 128, 128, 0.35);
+	border-radius: 8px;
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+	width: 100%;
+	max-width: 480px;
+	max-height: 90vh;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	font-family: inherit;
+}
+
+.wysiwyg-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 16px;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+	background-color: rgba(0, 0, 0, 0.03);
+}
+
+.wysiwyg-modal-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 700;
+	font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	color: var(--wysiwyg-accent-text);
+}
+
+.wysiwyg-modal-close {
+	background: transparent;
+	border: 0;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--wysiwyg-text-subtle);
+	padding: 0 4px;
+}
+
+.wysiwyg-modal-close:hover {
+	color: var(--wysiwyg-text);
+}
+
+.wysiwyg-modal-helpline {
+	padding: 8px 16px 0;
+	font-size: 12px;
+	color: var(--wysiwyg-text-muted);
+}
+
+.wysiwyg-modal-tabs {
+	display: flex;
+	gap: 4px;
+	padding: 10px 16px 0;
+	border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.wysiwyg-modal-tab {
 	background: transparent;
 	border: 1px solid transparent;
-	border-radius: 3px;
+	border-bottom: 2px solid transparent;
+	padding: 6px 12px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--wysiwyg-text-muted);
 	cursor: pointer;
-	padding: 1px 3px;
+}
+
+.wysiwyg-modal-tab.is-active {
+	color: var(--wysiwyg-accent-text);
+	border-bottom-color: var(--wysiwyg-accent);
+}
+
+.wysiwyg-modal-body {
+	padding: 14px 16px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+.wysiwyg-modal-field {
+	margin-bottom: 12px;
+}
+
+.wysiwyg-modal-field:last-child {
+	margin-bottom: 0;
+}
+
+.wysiwyg-modal-label {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	margin-bottom: 4px;
+	color: var(--wysiwyg-text);
+}
+
+.wysiwyg-modal-badge-req {
+	color: var(--wysiwyg-danger);
+}
+
+.wysiwyg-modal-badge-opt {
+	font-weight: 400;
+	color: var(--wysiwyg-text-subtle);
 	font-size: 11px;
-	line-height: 1;
-	color: inherit;
-	opacity: 0.7;
-	transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.wysiwyg-opaque-btn:hover {
-	opacity: 1;
-	background-color: rgba(128, 128, 128, 0.2);
-	border-color: rgba(128, 128, 128, 0.3);
+.wysiwyg-modal-input,
+.wysiwyg-modal-textarea {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 7px 10px;
+	font-size: 13px;
+	font-family: inherit;
+	color: var(--wysiwyg-text);
+	background-color: var(--wysiwyg-surface);
+	border: 1px solid rgba(128, 128, 128, 0.4);
+	border-radius: 4px;
 }
 
-.wysiwyg-opaque-btn:focus-visible {
-	outline: 2px solid #3f9cdb;
-	opacity: 1;
+.wysiwyg-modal-input:focus,
+.wysiwyg-modal-textarea:focus {
+	outline: none;
+	border-color: var(--wysiwyg-accent);
+	box-shadow: 0 0 0 2px rgba(63, 156, 219, 0.2);
 }
 
-.wysiwyg-opaque-btn--remove:hover {
-	color: #d32f2f;
-	background-color: rgba(211, 47, 47, 0.1);
-	border-color: rgba(211, 47, 47, 0.2);
+.wysiwyg-modal-raw {
+	font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	font-size: 12px;
+	resize: vertical;
+}
+
+.wysiwyg-modal-color-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.wysiwyg-modal-color-picker {
+	width: 38px;
+	height: 32px;
+	padding: 2px;
+	border: 1px solid rgba(128, 128, 128, 0.4);
+	border-radius: 4px;
+	background: var(--wysiwyg-surface);
+	cursor: pointer;
+}
+
+.wysiwyg-modal-error {
+	margin-top: 8px;
+	padding: 6px 10px;
+	font-size: 12px;
+	color: var(--wysiwyg-danger-text);
+	background-color: var(--wysiwyg-danger-bg);
+	border: 1px solid var(--wysiwyg-danger-border);
+	border-radius: 4px;
+}
+
+.wysiwyg-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 10px 16px;
+	border-top: 1px solid rgba(128, 128, 128, 0.2);
+	background-color: rgba(0, 0, 0, 0.02);
+}
+
+.wysiwyg-modal-btn {
+	padding: 6px 14px;
+	font-size: 13px;
+	font-weight: 600;
+	border-radius: 4px;
+	cursor: pointer;
+	border: 1px solid transparent;
+}
+
+.wysiwyg-modal-btn--secondary {
+	background-color: var(--wysiwyg-surface-alt);
+	color: var(--wysiwyg-text);
+	border-color: var(--wysiwyg-border-muted);
+}
+
+.wysiwyg-modal-btn--secondary:hover {
+	background-color: var(--wysiwyg-surface-hover);
+}
+
+.wysiwyg-modal-btn--primary {
+	background-color: var(--wysiwyg-accent-strong);
+	color: #ffffff;
+}
+
+.wysiwyg-modal-btn--primary:hover {
+	background-color: var(--wysiwyg-accent-hover);
 }
 

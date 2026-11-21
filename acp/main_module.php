@@ -17,7 +17,22 @@ class main_module
 
 	public function main($id, $mode)
 	{
-		global $language, $template, $request, $config;
+		global $phpbb_container;
+
+		/** @var \phpbb\language\language $language */
+		$language = $phpbb_container->get('language');
+		/** @var \phpbb\template\template $template */
+		$template = $phpbb_container->get('template');
+		/** @var \phpbb\request\request_interface $request */
+		$request = $phpbb_container->get('request');
+		/** @var \phpbb\config\config $config */
+		$config = $phpbb_container->get('config');
+		/** @var \phpbb\log\log_interface $phpbb_log */
+		$phpbb_log = $phpbb_container->get('log');
+		/** @var \phpbb\user $user */
+		$user = $phpbb_container->get('user');
+		/** @var \phpbb\cache\driver\driver_interface $cache */
+		$cache = $phpbb_container->get('cache.driver');
 
 		$this->tpl_name = 'acp_wysiwyg_body';
 		$this->page_title = $language->lang('ACP_WYSIWYG_TITLE');
@@ -34,6 +49,11 @@ class main_module
 			$config->set('wysiwyg_enabled', $request->variable('wysiwyg_enabled', 0));
 			$config->set('wysiwyg_default_enabled', $request->variable('wysiwyg_default_enabled', 0));
 			$config->set('wysiwyg_allow_toggle', $request->variable('wysiwyg_allow_toggle', 0));
+
+			$cache->destroy('sql', BBCODES_TABLE);
+			$cache->destroy('sql', SMILIES_TABLE);
+
+			$phpbb_log->add('admin', $user->data['user_id'], $user->ip, 'LOG_WYSIWYG_SETTINGS');
 
 			trigger_error($language->lang('ACP_WYSIWYG_SETTINGS_SAVED') . adm_back_link($this->u_action));
 		}

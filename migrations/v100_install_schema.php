@@ -13,7 +13,7 @@ class v100_install_schema extends \phpbb\db\migration\migration
 {
 	static public function depends_on()
 	{
-		return ['\phpbb\db\migration\data\v31x\v314'];
+		return ['\phpbb\db\migration\data\v330\v330'];
 	}
 
 	public function effectively_installed()

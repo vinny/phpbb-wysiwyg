@@ -47,7 +47,7 @@ class StubRenderer implements \phpbb\textformatter\renderer_interface
 
 class DummyDB
 {
-	public function sql_query($sql) { return true; }
+	public function sql_query($sql, $cache_ttl = 0) { return true; }
 	public function sql_fetchrow($result) { return false; }
 	public function sql_freeresult($result) {}
 }
@@ -60,6 +60,7 @@ class DummyLanguage
 			'WROTE' => 'wrote',
 			'CODE' => 'Code',
 			'SELECT_ALL_CODE' => 'Select all',
+			'WYSIWYG_SPOILER' => 'Spoiler',
 		];
 		return isset($map[$key]) ? $map[$key] : $key;
 	}

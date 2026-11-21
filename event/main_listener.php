@@ -234,7 +234,10 @@ class main_listener implements EventSubscriberInterface
 			'WYSIWYG_CLOSE_MENU', 'WYSIWYG_CUSTOM_BBCODES', 'WYSIWYG_PROMPT_CUSTOM_BBCODE',
 			'WYSIWYG_ATTACHMENT', 'WYSIWYG_SPOILER', 'WYSIWYG_TOO_FEW_CHARS', 'WYSIWYG_TOO_FEW_CHARS_LIMIT',
 			'WYSIWYG_TOO_MANY_CHARS', 'WYSIWYG_TOO_MANY_CHARS_LIMIT',
-			'WYSIWYG_OPAQUE_COPY', 'WYSIWYG_OPAQUE_EDIT', 'WYSIWYG_OPAQUE_REMOVE', 'WYSIWYG_COPIED', 'WYSIWYG_EDIT_BBCODE_TITLE'
+			'WYSIWYG_OPAQUE_COPY', 'WYSIWYG_OPAQUE_EDIT', 'WYSIWYG_OPAQUE_REMOVE', 'WYSIWYG_COPIED', 'WYSIWYG_EDIT_BBCODE_TITLE',
+			'WYSIWYG_MODAL_INSERT', 'WYSIWYG_MODAL_UPDATE', 'WYSIWYG_MODAL_CANCEL', 'WYSIWYG_MODAL_FIELDS_TAB',
+			'WYSIWYG_MODAL_RAW_TAB', 'WYSIWYG_MODAL_OPTIONAL', 'WYSIWYG_MODAL_CONTENT', 'WYSIWYG_MODAL_REQUIRED_ERROR',
+			'WYSIWYG_OPAQUE_DBLCLICK_HINT', 'WYSIWYG_EXPORT_ERROR'
 		];
 
 		$translations = [];
@@ -268,6 +271,8 @@ class main_listener implements EventSubscriberInterface
 			$max_chars = isset($this->config['max_post_chars']) ? (int) $this->config['max_post_chars'] : 0;
 		}
 
+		$route_params = function_exists('generate_link_hash') ? ['hash' => generate_link_hash('vinny_wysiwyg')] : [];
+
 		$vars = [
 			'S_WYSIWYG_ENABLED'             => true,
 			'S_WYSIWYG_TOGGLE'              => (bool) $this->config['wysiwyg_allow_toggle'],
@@ -275,8 +280,8 @@ class main_listener implements EventSubscriberInterface
 			'WYSIWYG_MAX_POST_CHARS'        => $max_chars,
 			'WYSIWYG_LANG_JSON'             => $this->get_wysiwyg_lang_json(),
 			'WYSIWYG_CUSTOM_BBCODES_JSON'   => json_encode($custom_bbcodes),
-			'WYSIWYG_HTML_TO_BBCODE_URL'    => $this->helper->route('vinny_wysiwyg_html_to_bbcode'),
-			'WYSIWYG_BBCODE_TO_HTML_URL'    => $this->helper->route('vinny_wysiwyg_bbcode_to_html'),
+			'WYSIWYG_HTML_TO_BBCODE_URL'    => $this->helper->route('vinny_wysiwyg_html_to_bbcode', $route_params),
+			'WYSIWYG_BBCODE_TO_HTML_URL'    => $this->helper->route('vinny_wysiwyg_bbcode_to_html', $route_params),
 		];
 
 		if ($html_content !== '')
@@ -362,6 +367,6 @@ class main_listener implements EventSubscriberInterface
 
 	public function on_user_setup($event)
 	{
-		$this->user->add_lang_ext('vinny/wysiwyg', 'info_acp_wysiwyg');
+		$this->user->add_lang_ext('vinny/wysiwyg', 'common');
 	}
 }

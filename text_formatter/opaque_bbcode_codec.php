@@ -22,11 +22,12 @@ class opaque_bbcode_codec
 	* @param string $displayName
 	* @param bool $isBlock
 	* @param string $fingerprint
+	* @param string $renderedHtml Optional sanitized HTML preview for visual rendering in editor
 	* @return array
 	*/
-	public function createEnvelope($source, $displayName, $isBlock = false, $fingerprint = '')
+	public function createEnvelope($source, $displayName, $isBlock = false, $fingerprint = '', $renderedHtml = '')
 	{
-		return [
+		$envelope = [
 			'version' => self::SCHEMA_VERSION,
 			'kind' => self::KIND,
 			'source' => (string) $source,
@@ -34,6 +35,44 @@ class opaque_bbcode_codec
 			'isBlock' => (bool) $isBlock,
 			'definitionFingerprint' => (string) $fingerprint,
 		];
+
+		if ($renderedHtml !== '')
+		{
+			$envelope['renderedHtml'] = $this->sanitizeRenderedHtml((string) $renderedHtml);
+		}
+
+		return $envelope;
+	}
+
+	/**
+	* Sanitize server-rendered BBCode HTML for safe live preview inside the WYSIWYG editor
+	* Strips scripts, event handlers, dangerous tags and javascript:/vbscript: URIs
+	*
+	* @param string $html
+	* @return string
+	*/
+	public function sanitizeRenderedHtml($html)
+	{
+		if (!is_string($html) || trim($html) === '')
+		{
+			return '';
+		}
+
+		// Remove <script>, <object>, <embed>, <applet>, <base>, <meta>, <link> blocks
+		$clean = preg_replace('#<(script|object|embed|applet|base|meta|link)\b[^>]*>.*?</\1>#is', '', $html);
+		$clean = preg_replace('#<(script|object|embed|applet|base|meta|link)\b[^>]*/?>#is', '', $clean);
+
+		// Remove inline JS event handlers (on*)
+		$clean = preg_replace('/\s+on[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $clean);
+
+		// Neutralize javascript: / vbscript: / data:text/html URIs in href/src/action/formaction
+		$clean = preg_replace(
+			'/\b(href|src|action|formaction|xlink:href)\s*=\s*(["\']?)\s*(?:javascript|vbscript|data\s*:\s*text\/html)\s*:[^"\'>\s]*\2/i',
+			'$1="#"',
+			$clean
+		);
+
+		return trim($clean);
 	}
 
 	/**
@@ -141,7 +180,7 @@ class opaque_bbcode_codec
 			return null;
 		}
 
-		return [
+		$result = [
 			'version' => $data['version'],
 			'kind' => $data['kind'],
 			'source' => $data['source'],
@@ -149,6 +188,13 @@ class opaque_bbcode_codec
 			'isBlock' => !empty($data['isBlock']),
 			'definitionFingerprint' => isset($data['definitionFingerprint']) && is_string($data['definitionFingerprint']) ? $data['definitionFingerprint'] : '',
 		];
+
+		if (isset($data['renderedHtml']) && is_string($data['renderedHtml']))
+		{
+			$result['renderedHtml'] = $data['renderedHtml'];
+		}
+
+		return $result;
 	}
 
 	/**

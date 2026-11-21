@@ -1,4 +1,22 @@
 services:
+    vinny.wysiwyg.text_formatter.opaque_codec:
+        class: vinny\wysiwyg\text_formatter\opaque_bbcode_codec
+
+    vinny.wysiwyg.text_formatter.catalog:
+        class: vinny\wysiwyg\text_formatter\custom_bbcode_catalog
+        arguments:
+            - '@dbal.conn'
+            - '%tables.bbcodes%'
+            - '@cache.driver'
+
+    vinny.wysiwyg.text_formatter.preview_renderer:
+        class: vinny\wysiwyg\text_formatter\preview_renderer
+        arguments:
+            - '@cache.driver'
+            - '%text_formatter.cache.dir%'
+            - '%text_formatter.cache.renderer.key%'
+            - '@text_formatter.s9e.factory'
+
     vinny.wysiwyg.text_formatter.converter:
         class: vinny\wysiwyg\text_formatter\converter
         arguments:
@@ -10,6 +28,9 @@ services:
             - '%tables.bbcodes%'
             - '%tables.smilies%'
             - '@text_formatter.utils'
+            - '@vinny.wysiwyg.text_formatter.opaque_codec'
+            - '@vinny.wysiwyg.text_formatter.catalog'
+            - '@vinny.wysiwyg.text_formatter.preview_renderer'
 
     vinny.wysiwyg.controller:
         class: vinny\wysiwyg\controller\wysiwyg_controller
@@ -17,7 +38,8 @@ services:
             - '@request'
             - '@vinny.wysiwyg.text_formatter.converter'
             - '@config'
-            - '@user'
+            - '@auth'
+            - '@language'
 
     vinny.wysiwyg.listener:
         class: vinny\wysiwyg\event\main_listener

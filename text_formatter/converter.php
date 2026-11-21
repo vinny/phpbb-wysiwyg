@@ -35,9 +35,6 @@ class converter
 	/** @var array|null */
 	protected $smilies_cache = null;
 
-	/** @var array|null */
-	protected $custom_bbcodes_cache = null;
-
 	/** @var \phpbb\textformatter\utils_interface|null */
 	protected $utils;
 
@@ -46,6 +43,9 @@ class converter
 
 	/** @var custom_bbcode_catalog */
 	protected $catalog;
+
+	/** @var \phpbb\textformatter\renderer_interface|null */
+	protected $renderer;
 
 	/**
 	* Constructor
@@ -60,8 +60,9 @@ class converter
 	* @param \phpbb\textformatter\utils_interface|null $utils
 	* @param opaque_bbcode_codec|null $opaque_codec
 	* @param custom_bbcode_catalog|null $catalog
+	* @param \phpbb\textformatter\renderer_interface|null $renderer
 	*/
-	public function __construct($db, $config, $phpbb_root_path, $parser, $language, $bbcodes_table = '', $smilies_table = '', $utils = null, $opaque_codec = null, $catalog = null)
+	public function __construct($db, $config, $phpbb_root_path, $parser, $language, $bbcodes_table = '', $smilies_table = '', $utils = null, $opaque_codec = null, $catalog = null, $renderer = null)
 	{
 		$this->db = $db;
 		$this->config = $config;
@@ -73,6 +74,7 @@ class converter
 		$this->utils = $utils;
 		$this->opaque_codec = $opaque_codec ?: new opaque_bbcode_codec();
 		$this->catalog = $catalog ?: new custom_bbcode_catalog($this->db, $this->bbcodes_table);
+		$this->renderer = $renderer;
 	}
 
 	/**
@@ -542,22 +544,37 @@ class converter
 						}
 						break;
 
+					case 'EMOJI': // Unicode emoji parsed by s9e Emoji plugin
+						$parent->appendChild($html_dom->createTextNode($child->textContent));
+						break;
+
 					case 'SPOILER':
 						$el = $html_dom->createElement('details');
 						$el->setAttribute('data-bbcode', 'spoiler');
-						$summary = $html_dom->createElement('summary', 'Spoiler');
+						$summary = $html_dom->createElement('summary', $this->language->lang('WYSIWYG_SPOILER'));
 						$el->appendChild($summary);
 						$parent->appendChild($el);
 						$this->convertNodes($child, $html_dom, $el);
 						break;
 
 					case 'ATTACHMENT':
-						$id = $child->getAttribute('id');
-						$filename = $child->textContent;
+						$index = $child->hasAttribute('index') ? $child->getAttribute('index') : $child->getAttribute('id');
+						$filename = $child->getAttribute('filename');
+						if ($filename === '')
+						{
+							foreach ($child->childNodes as $sub)
+							{
+								if ($sub->nodeType === XML_TEXT_NODE)
+								{
+									$filename .= $sub->nodeValue;
+								}
+							}
+							$filename = trim($filename);
+						}
 						$el = $html_dom->createElement('div');
 						$el->setAttribute('class', 'wysiwyg-attachment');
 						$el->setAttribute('data-bbcode', 'attachment');
-						$el->setAttribute('data-bbcode-val', $id);
+						$el->setAttribute('data-bbcode-val', (string) $index);
 						$el->setAttribute('data-filename', $filename);
 						$el->appendChild($html_dom->createTextNode($filename));
 						$parent->appendChild($el);
@@ -681,8 +698,76 @@ class converter
 
 					default:
 						$clean_tag = strtolower($tag_name);
+						$def = $this->getCatalog()->getDefinition($clean_tag);
 
-						// Extract exact source for this custom BBCode subtree losslessly
+						// Tier 1: Safe in-place editable wrapper custom BBCode
+						if ($def !== null && !empty($def['schema']['can_inline_edit']) && !empty($def['schema']['inline_edit_meta']))
+						{
+							$inline_meta = $def['schema']['inline_edit_meta'];
+							$is_block = !empty($def['is_block']) && $parent->nodeName === 'div';
+							$el = $html_dom->createElement($is_block ? 'div' : 'span');
+							$el->setAttribute('data-bbcode', $clean_tag);
+							$el->setAttribute('data-custom-bbcode', 'true');
+
+							// Collect XML attributes and map tokens for style/class interpolation
+							$xml_attrs = [];
+							$token_replacements = [];
+							if ($child->hasAttributes())
+							{
+								foreach ($child->attributes as $attr)
+								{
+									$xml_attrs[$attr->name] = $attr->value;
+								}
+							}
+
+							if (!empty($def['schema']['default_attr']['parts'][0]['token']))
+							{
+								$tok = $def['schema']['default_attr']['parts'][0]['token'];
+								$attr_key = $clean_tag;
+								if (isset($xml_attrs[$attr_key]))
+								{
+									$token_replacements['{' . $tok['token_id'] . '}'] = $xml_attrs[$attr_key];
+								}
+							}
+							foreach ($def['schema']['attributes'] as $attr_def)
+							{
+								if (!empty($attr_def['parts'][0]['token']) && isset($xml_attrs[$attr_def['name']]))
+								{
+									$tok = $attr_def['parts'][0]['token'];
+									$token_replacements['{' . $tok['token_id'] . '}'] = $xml_attrs[$attr_def['name']];
+								}
+							}
+
+							if (!empty($xml_attrs))
+							{
+								if (count($xml_attrs) === 1 && isset($xml_attrs[$clean_tag]))
+								{
+									$el->setAttribute('data-bbcode-val', $xml_attrs[$clean_tag]);
+								}
+								else
+								{
+									$el->setAttribute('data-bbcode-attrs', json_encode($xml_attrs, JSON_UNESCAPED_UNICODE));
+								}
+							}
+
+							$resolved_style = !empty($inline_meta['style']) ? strtr($inline_meta['style'], $token_replacements) : '';
+							if ($resolved_style !== '' && !preg_match('/expression\s*\(|javascript\s*:/i', $resolved_style))
+							{
+								$el->setAttribute('style', $resolved_style);
+							}
+
+							$resolved_class = !empty($inline_meta['class']) ? strtr($inline_meta['class'], $token_replacements) : '';
+							if ($resolved_class !== '')
+							{
+								$el->setAttribute('class', $resolved_class);
+							}
+
+							$parent->appendChild($el);
+							$this->convertNodes($child, $html_dom, $el);
+							break;
+						}
+
+						// Tier 2: Lossless opaque envelope with live server-rendered HTML preview
 						$source = $this->unparseXmlNode($child);
 
 						$is_block = false;
@@ -695,12 +780,42 @@ class converter
 						}
 
 						$fingerprint = $this->getCatalog()->getFingerprint($clean_tag);
-						$payload = $this->getOpaqueCodec()->createEnvelope($source, $clean_tag, $is_block, $fingerprint);
+						$rendered_html = $this->renderXmlNodePreview($child);
+						$payload = $this->getOpaqueCodec()->createEnvelope($source, $clean_tag, $is_block, $fingerprint, $rendered_html);
 						$opaque_el = $this->getOpaqueCodec()->renderEnvelopeElement($html_dom, $payload);
 						$parent->appendChild($opaque_el);
 						break;
 				}
 			}
+		}
+	}
+
+	/**
+	* Render a single s9e XML node into safe preview HTML using phpBB's renderer
+	*
+	* @param \DOMNode $node
+	* @return string
+	*/
+	protected function renderXmlNodePreview(\DOMNode $node)
+	{
+		if ($this->renderer === null || !method_exists($this->renderer, 'render'))
+		{
+			return '';
+		}
+
+		try
+		{
+			$doc = new \DOMDocument('1.0', 'UTF-8');
+			$imported = $doc->importNode($node, true);
+			$doc->appendChild($imported);
+			$node_xml = $doc->saveXML($imported);
+
+			$html = $this->renderer->render('<r>' . $node_xml . '</r>');
+			return is_string($html) ? $this->getOpaqueCodec()->sanitizeRenderedHtml($html) : '';
+		}
+		catch (\Exception $e)
+		{
+			return '';
 		}
 	}
 
@@ -867,23 +982,34 @@ class converter
 								}
 								else if ($name_lower === $tag)
 								{
-									$attr_str = '=' . $value . $attr_str;
+									$formatted = (preg_match('/[\s\]="]/', (string) $value)) ? '"' . str_replace('"', '\\"', (string) $value) . '"' : $value;
+									$attr_str = '=' . $formatted . $attr_str;
 								}
 								else
 								{
-									$attr_str .= ' ' . $name . '="' . $value . '"';
+									$attr_str .= ' ' . $name . '="' . str_replace('"', '\\"', (string) $value) . '"';
 								}
 							}
 						}
 					}
 					else if ($val !== '')
 					{
-						$attr_str = '=' . $val;
+						$formatted = (preg_match('/[\s\]="]/', (string) $val)) ? '"' . str_replace('"', '\\"', (string) $val) . '"' : $val;
+						$attr_str = '=' . $formatted;
 					}
 
 					if ($tag === 'hr')
 					{
 						$bbcode .= '[hr]';
+					}
+					else if ($tag === 'attachment')
+					{
+						$filename = $child->getAttribute('data-filename');
+						if ($filename === '')
+						{
+							$filename = trim($this->htmlNodeToBBCode($child));
+						}
+						$bbcode .= '[attachment' . $attr_str . ']' . $filename . '[/attachment]' . "\n";
 					}
 					else
 					{
@@ -1035,6 +1161,14 @@ class converter
 						if ($child->getAttribute('data-smiley'))
 						{
 							$bbcode .= $child->getAttribute('data-smiley');
+						}
+						else if (
+							(preg_match('/\b(?:emoji|twemoji)\b/i', $child->getAttribute('class')) ||
+							 preg_match('/(?:twemoji|\/emoji\/)/i', $child->getAttribute('src'))) &&
+							$child->getAttribute('alt') !== ''
+						)
+						{
+							$bbcode .= $child->getAttribute('alt');
 						}
 						else
 						{
@@ -1221,7 +1355,7 @@ class converter
 				try
 				{
 					$sql = 'SELECT code, smiley_url FROM ' . $table;
-					$result = $this->db->sql_query($sql);
+					$result = $this->db->sql_query($sql, 3600);
 					while ($row = $this->db->sql_fetchrow($result))
 					{
 						$this->smilies_cache[$row['code']] = $row['smiley_url'];
@@ -1246,94 +1380,40 @@ class converter
 	}
 
 	/**
-	* Load and cache custom bbcodes from database
-	*
-	* @return array
-	*/
-	public function loadCustomBBCodes()
-	{
-		if ($this->custom_bbcodes_cache !== null)
-		{
-			return $this->custom_bbcodes_cache;
-		}
-
-		$this->custom_bbcodes_cache = [];
-		$table = $this->bbcodes_table ?: (defined('BBCODES_TABLE') ? BBCODES_TABLE : '');
-		if (!$table)
-		{
-			return $this->custom_bbcodes_cache;
-		}
-
-		try
-		{
-			$sql = 'SELECT bbcode_id, bbcode_tag, bbcode_helpline, display_on_posting, bbcode_match, bbcode_tpl
-					FROM ' . $table . '
-					ORDER BY bbcode_tag ASC';
-			$result = $this->db->sql_query($sql);
-			if ($result)
-			{
-				while ($row = $this->db->sql_fetchrow($result))
-				{
-					$tag = $row['bbcode_tag'];
-					$clean_tag = strtolower(rtrim($tag, '='));
-					$has_val = (strpos($tag, '=') !== false ||
-						strpos($row['bbcode_match'], '=' . $clean_tag) !== false ||
-						strpos($row['bbcode_match'], '=' . strtoupper($clean_tag)) !== false ||
-						strpos($row['bbcode_match'], '={') !== false);
-
-					$this->custom_bbcodes_cache[$clean_tag] = [
-						'id'                  => (int) $row['bbcode_id'],
-						'name'                => $clean_tag,
-						'tag'                 => $clean_tag,
-						'helpline'            => !empty($row['bbcode_helpline']) ? $row['bbcode_helpline'] : '[' . $clean_tag . ']',
-						'display_on_posting'  => (int) $row['display_on_posting'],
-						'has_val'             => $has_val,
-						'match'               => $row['bbcode_match'],
-						'tpl'                 => $row['bbcode_tpl'],
-					];
-				}
-				$this->db->sql_freeresult($result);
-			}
-		}
-		catch (\Exception $e)
-		{
-			// Return empty array if table not available or error occurs
-		}
-
-		return $this->custom_bbcodes_cache;
-	}
-
-	/**
 	* Get active custom BBCodes configured in phpBB for display on posting
 	*
 	* @return array
 	*/
 	public function getCustomBBCodes()
 	{
-		$all = $this->loadCustomBBCodes();
 		$excluded = [
 			'b', 'i', 'u', 's', 'quote', 'code', 'list', 'img', 'url', 'flash', 'size', 'color', 'email',
 			'align', 'h1', 'h2', 'h3', 'h4', 'highlight', 'sub', 'sup', 'hr', 'table', 'tr', 'td', 'attachment', 'spoiler'
 		];
 
 		$posting_bbcodes = [];
-		$catalog_defs = $this->getCatalog()->getDefinitions();
+		$catalog_list = $this->getCatalog()->getPostingBbcodesList();
 
-		foreach ($all as $clean_tag => $data)
+		foreach ($catalog_list as $data)
 		{
-			if ($data['display_on_posting'] === 1 && !in_array($clean_tag, $excluded))
+			$clean_tag = $data['tag'];
+			if (!in_array($clean_tag, $excluded))
 			{
-				$cat_def = isset($catalog_defs[$clean_tag]) ? $catalog_defs[$clean_tag] : null;
+				$schema = isset($data['schema']) ? $data['schema'] : [];
+				$has_val = (!empty($schema['default_attr']) || !empty($schema['attributes']));
+
 				$posting_bbcodes[] = [
 					'id'          => $data['id'],
-					'name'        => $data['name'],
-					'tag'         => $data['tag'],
-					'helpline'    => $data['helpline'],
-					'has_val'     => $data['has_val'],
+					'name'        => $clean_tag,
+					'tag'         => $clean_tag,
+					'raw_tag'     => isset($data['raw_tag']) ? $data['raw_tag'] : $clean_tag,
+					'helpline'    => !empty($data['helpline']) ? $data['helpline'] : '[' . $clean_tag . ']',
+					'has_val'     => $has_val,
 					'tpl'         => $data['tpl'],
 					'match'       => $data['match'],
-					'is_block'    => $cat_def ? $cat_def['is_block'] : false,
-					'fingerprint' => $cat_def ? $cat_def['fingerprint'] : '',
+					'is_block'    => !empty($data['is_block']),
+					'fingerprint' => isset($data['fingerprint']) ? $data['fingerprint'] : '',
+					'schema'      => $schema,
 				];
 			}
 		}

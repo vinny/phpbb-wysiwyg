@@ -1,9 +1,15 @@
 {% if S_WYSIWYG_ENABLED %}
-{% INCLUDECSS '@vinny_wysiwyg/wysiwyg.css' %}
+	{% if not definition.INCLUDED_WYSIWYG_CSS %}
+		{% INCLUDECSS '@vinny_wysiwyg/wysiwyg.css' %}
+		{% DEFINE INCLUDED_WYSIWYG_CSS = true %}
+	{% endif %}
 
-	<div id="wysiwyg-editor-container" style="display: none;" data-toggle-enabled="{{ S_WYSIWYG_TOGGLE ? '1' : '0' }}" data-min-chars="{{ WYSIWYG_MIN_POST_CHARS }}" data-max-chars="{{ WYSIWYG_MAX_POST_CHARS }}" data-lang="{{ WYSIWYG_LANG_JSON|e('html_attr') }}" data-custom-bbcodes="{{ WYSIWYG_CUSTOM_BBCODES_JSON|e('html_attr') }}" data-html-to-bbcode-url="{{ WYSIWYG_HTML_TO_BBCODE_URL }}" data-bbcode-to-html-url="{{ WYSIWYG_BBCODE_TO_HTML_URL }}">
-		<textarea id="wysiwyg-initial-content" style="display: none;">{{ WYSIWYG_CONTENT }}</textarea>
+	<div id="wysiwyg-editor-container" style="display: none;" data-toggle-enabled="{{ S_WYSIWYG_TOGGLE ? '1' : '0' }}" data-min-chars="{{ WYSIWYG_MIN_POST_CHARS }}" data-max-chars="{{ WYSIWYG_MAX_POST_CHARS }}" data-lang="{{ WYSIWYG_LANG_JSON|e('html_attr') }}" data-custom-bbcodes="{{ WYSIWYG_CUSTOM_BBCODES_JSON|e('html_attr') }}" data-html-to-bbcode-url="{{ WYSIWYG_HTML_TO_BBCODE_URL|e('html_attr') }}" data-bbcode-to-html-url="{{ WYSIWYG_BBCODE_TO_HTML_URL|e('html_attr') }}">
+		<textarea id="wysiwyg-initial-content" style="display: none;">{{ WYSIWYG_CONTENT|e('html') }}</textarea>
 	</div>
 
-	{% INCLUDEJS '@vinny_wysiwyg/js/tiptap-simple.js' %}
+	{% if not definition.INCLUDED_WYSIWYG_JS %}
+		{% INCLUDEJS '@vinny_wysiwyg/js/tiptap-simple.js' %}
+		{% DEFINE INCLUDED_WYSIWYG_JS = true %}
+	{% endif %}
 {% endif %}
