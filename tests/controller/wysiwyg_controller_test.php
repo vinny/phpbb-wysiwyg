@@ -87,12 +87,22 @@ class wysiwyg_controller_test extends \phpbb_test_case
 	protected $config;
 	protected $auth;
 	protected $language;
+	protected $original_user;
 
 	public function setUp(): void
 	{
 		parent::setUp();
 
+		global $user;
+		$this->original_user = $user;
+		$user = new \stdClass();
+		$user->data = ['user_form_salt' => 'test_salt'];
+
 		$this->request = new DummyRequest();
+		if (function_exists('generate_link_hash'))
+		{
+			$this->request->vars['hash'] = generate_link_hash('vinny_wysiwyg');
+		}
 		$this->converter = new DummyConverter();
 		$this->config = new DummyConfig();
 		$this->config['wysiwyg_enabled'] = 1;
@@ -107,6 +117,14 @@ class wysiwyg_controller_test extends \phpbb_test_case
 			$this->auth,
 			$this->language
 		);
+	}
+
+	public function tearDown(): void
+	{
+		global $user;
+		$user = $this->original_user;
+
+		parent::tearDown();
 	}
 
 	public function test_html_to_bbcode_disabled()

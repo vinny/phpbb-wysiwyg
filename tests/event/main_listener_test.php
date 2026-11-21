@@ -78,10 +78,16 @@ class main_listener_test extends \phpbb_test_case
 	protected $user;
 	protected $template;
 	protected $helper;
+	protected $original_user;
 
 	public function setUp(): void
 	{
 		parent::setUp();
+
+		global $user;
+		$this->original_user = $user;
+		$user = new \stdClass();
+		$user->data = ['user_form_salt' => 'test_salt'];
 
 		$this->request = new DummyRequest();
 		$this->converter = new DummyConverter();
@@ -103,6 +109,14 @@ class main_listener_test extends \phpbb_test_case
 			$this->template,
 			$this->helper
 		);
+	}
+
+	public function tearDown(): void
+	{
+		global $user;
+		$user = $this->original_user;
+
+		parent::tearDown();
 	}
 
 	public function test_getSubscribedEvents()
